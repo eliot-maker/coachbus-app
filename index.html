@@ -2,410 +2,112 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" content="#3b82f6">
-    <title>CoachBus - Présences</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoachBus - Connexion</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="manifest" href="data:application/manifest+json,{name:'CoachBus',short_name:'CoachBus',start_url:'.',display:'standalone',background_color:'%23ffffff',theme_color:'%233b82f6',icons:[{src:'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',sizes:'512x512',type:'image/png'}]}">
-    
-    <style>
-        @media print {
-            .no-print, header, nav, button:not(.print-keep), .bg-gray-50, .bg-white, .shadow, .rounded-lg, .fixed { display: none !important; }
-            body, html { background: white; padding: 0.5cm; }
-            .print-only { display: block !important; }
-            .print-table { display: table !important; width: 100%; border-collapse: collapse; }
-            .print-table th, .print-table td { border: 1px solid #ddd; padding: 8px; }
-            .print-header { display: flex !important; justify-content: space-between; margin-bottom: 20px; font-size: 16pt; font-weight: bold; }
-        }
-        .print-only { display: none; }
-        .btn-tactile { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 600; touch-action: manipulation; cursor: pointer; }
-        .list-item { min-height: 60px; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
-        body { background-color: #f9fafb; }
-    </style>
 </head>
-<body class="bg-gray-50 text-gray-900 antialiased">
-
-<div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-xl relative">
-    <header id="main-header" class="p-4 border-b border-gray-200 flex justify-between items-center bg-white no-print">
-        <h1 class="text-xl font-bold text-blue-600"><i class="fas fa-bus mr-2"></i>CoachBus</h1>
-        <div id="user-info" class="text-sm text-gray-600"></div>
-        <button id="logout-btn" class="text-gray-500 hover:text-red-500 p-2" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
-    </header>
-    <main id="content" class="p-4"></main>
-</div>
-
-<!-- Template d'impression -->
-<div id="print-template" class="print-only container mx-auto p-4">
-    <div class="print-header"><span>📋 Rapport de Présence - CoachBus</span><span id="print-date"></span></div>
-    <div id="print-bus-info" class="mb-4 text-lg"></div>
-    <table class="print-table"><thead><tr><th>Enfant</th><th>Âge</th><th>Groupe</th><th>Allergies</th><th>Statut</th><th>Commentaire</th></tr></thead><tbody id="print-tbody"></tbody></table>
-    <div class="print-footer" style="margin-top:20px;font-size:10pt;color:#666;">Document généré le <span id="print-generation-date"></span></div>
-</div>
-
-<script>
-    // ===================== CONFIGURATION =====================
-    const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // État global
-    let currentUser = null;
-    let currentRole = null;
-    let currentAppelId = null;
-    let currentBus = null;
-    let enfantsList = [];
-    let appelsEnCours = new Map();
-
-    // ===================== AFFICHAGE DES VUES =====================
-    function showView(viewName) {
-        const logoutBtn = document.getElementById('logout-btn');
-        const userInfo = document.getElementById('user-info');
-        
-        if (currentUser) {
-            const roleBadge = {
-                'super-admin': '🔧 Super Admin',
-                'admin': '📊 Admin',
-                'coach': '🚌 Coach'
-            }[currentRole] || currentRole;
-            
-            userInfo.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <span class="font-medium">${currentUser.nom || currentUser.identifiant_simple}</span>
-                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">${roleBadge}</span>
-                </div>
-            `;
-            logoutBtn.style.display = 'block';
-        } else {
-            userInfo.innerHTML = '';
-            logoutBtn.style.display = 'none';
-        }
-
-        switch(viewName) {
-            case 'login': renderLogin(); break;
-            case 'select-bus': renderSelectBus(); break;
-            case 'appel': renderAppel(); break;
-            case 'admin-dashboard': renderAdminDashboard(); break;
-            case 'admin-enfants': renderAdminEnfants(); break;
-            case 'admin-rapports': renderAdminRapports(); break;
-            default: renderLogin();
-        }
-    }
-
-    function logout() {
-        if (confirm('Déconnexion ?')) {
-            currentUser = null; currentRole = null; currentAppelId = null; currentBus = null;
-            enfantsList = []; appelsEnCours.clear();
-            showView('login');
-        }
-    }
-
-    // ===================== AUTHENTIFICATION =====================
-    async function handleLogin(identifiant) {
-        if (!identifiant.trim()) return alert('Entrez votre identifiant');
-        
-        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-600 mb-2"></i><p>Connexion...</p></div>`;
-
-        if (identifiant.toLowerCase() === 'superadmin') {
-            currentUser = { id: 'super', identifiant_simple: 'superadmin', nom: 'Super Admin' };
-            currentRole = 'super-admin';
-            showView('admin-dashboard');
-            return;
-        }
-
-        try {
-            const { data: coach, error } = await supabase
-                .from('Coachs')
-                .select('*')
-                .eq('Identifiant_Simple', identifiant.trim())
-                .maybeSingle();
-
-            if (error) throw error;
-            if (!coach) { alert('Identifiant inconnu'); showView('login'); return; }
-
-            currentUser = { id: coach.ID, identifiant_simple: coach.Identifiant_Simple, nom: coach.Nom };
-            currentRole = coach.Role || 'coach';
-            
-            if (currentRole === 'admin' || currentRole === 'super-admin') {
-                showView('admin-dashboard');
-            } else {
-                showView('select-bus');
-            }
-        } catch (e) {
-            alert('Erreur : ' + e.message);
-            showView('login');
-        }
-    }
-
-    // ===================== VUES =====================
-    function renderLogin() {
-        document.getElementById('content').innerHTML = `
-            <div class="flex flex-col items-center justify-center min-h-[70vh]">
-                <div class="w-full max-w-sm">
-                    <div class="text-center mb-8">
-                        <div class="bg-blue-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <i class="fas fa-bus text-5xl text-blue-600"></i>
-                        </div>
-                        <h2 class="text-2xl font-bold text-gray-800">Coach du Samedi</h2>
-                        <p class="text-gray-500 mt-2">Application de gestion des présences</p>
-                    </div>
-                    <div class="space-y-4">
-                        <input type="text" id="identifiant-input" placeholder="Votre identifiant" class="w-full p-4 border rounded-lg text-lg" autofocus autocomplete="off">
-                        <button id="login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white btn-tactile rounded-lg shadow-md">
-                            <i class="fas fa-arrow-right mr-2"></i> Accéder
-                        </button>
-                    </div>
-                    <div class="mt-8 p-4 bg-gray-50 rounded-lg">
-                        <p class="text-xs text-gray-600 mb-2 font-medium">📝 Identifiants :</p>
-                        <ul class="text-xs text-gray-500">
-                            <li>• superadmin (accès complet)</li>
-                            <li>• marie (admin)</li>
-                            <li>• julien (coach)</li>
-                        </ul>
-                    </div>
-                </div>
+<body class="bg-gray-100">
+    <div class="max-w-md mx-auto min-h-screen flex items-center justify-center p-4">
+        <div class="w-full bg-white rounded-xl shadow-lg p-8">
+            <div class="text-center mb-6">
+                <i class="fas fa-bus text-5xl text-blue-600 mb-3"></i>
+                <h1 class="text-2xl font-bold">Coach du Samedi</h1>
+                <p class="text-gray-500 mt-1">Connectez-vous avec votre identifiant</p>
             </div>
-        `;
-        const input = document.getElementById('identifiant-input');
-        const btn = document.getElementById('login-submit');
-        btn.addEventListener('click', () => handleLogin(input.value));
-        input.addEventListener('keypress', e => { if(e.key === 'Enter') handleLogin(input.value); });
-    }
+            <input type="text" id="identifiant" placeholder="ex: julien, marie" class="w-full p-4 border rounded-lg text-lg mb-4" autofocus>
+            <button id="login-btn" class="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-lg">
+                <i class="fas fa-arrow-right mr-2"></i>Accéder
+            </button>
+            <p class="text-xs text-center text-gray-400 mt-6">
+                superadmin, marie (admin), julien (coach)
+            </p>
+            <div id="error-msg" class="text-red-500 text-sm mt-3 text-center"></div>
+        </div>
+    </div>
+    <script>
+        const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    function renderSelectBus() {
-        document.getElementById('content').innerHTML = `
-            <div class="flex flex-col items-center justify-center min-h-[70vh] space-y-6">
-                <h2 class="text-2xl font-bold">Bonjour ${currentUser.nom || currentUser.identifiant_simple} !</h2>
-                <p class="text-gray-600">Choisissez le bus :</p>
-                <button id="bus1-btn" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6 text-2xl"><i class="fas fa-bus mr-3"></i>BUS 1</button>
-                <button id="bus2-btn" class="w-full bg-blue-500 text-white btn-tactile rounded-xl py-6 text-2xl"><i class="fas fa-bus mr-3"></i>BUS 2</button>
-            </div>
-        `;
-        document.getElementById('bus1-btn').addEventListener('click', () => startAppel('1'));
-        document.getElementById('bus2-btn').addEventListener('click', () => startAppel('2'));
-    }
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const identifiant = document.getElementById('identifiant').value.trim();
+            const errorDiv = document.getElementById('error-msg');
+            errorDiv.textContent = '';
 
-    async function startAppel(busNum) {
-        currentBus = busNum;
-        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin text-3xl"></i><p>Préparation...</p></div>`;
-        try {
-            const { data: appel, error } = await supabase.from('Appels').insert([{
-                Date: new Date().toISOString().split('T')[0],
-                Bus_Num: parseInt(busNum),
-                Coach_ID: currentUser.id,
-                Terminé: false
-            }]).select().single();
-            if (error) throw error;
-            currentAppelId = appel.ID;
-
-            const { data: enfants, error: errEnf } = await supabase.from('Enfants').select('*').order('Nom');
-            if (errEnf) throw errEnf;
-            enfantsList = enfants || [];
-            appelsEnCours.clear();
-            enfantsList.forEach(e => {
-                appelsEnCours.set(e.ID, { statut: e.Absent_Precoché ? 'Absent' : null, commentaire: '' });
-            });
-            showView('appel');
-        } catch (e) {
-            alert('Erreur création appel : ' + e.message);
-            showView('select-bus');
-        }
-    }
-
-    function renderAppel() {
-        let items = '';
-        enfantsList.forEach(e => {
-            const d = appelsEnCours.get(e.ID) || { statut: null, commentaire: '' };
-            const present = d.statut === 'Présent';
-            const absent = d.statut === 'Absent';
-            items += `
-                <div class="list-item" data-enfant-id="${e.ID}">
-                    <div class="flex justify-between">
-                        <div>
-                            <div class="font-medium">${e.Prenom} ${e.Nom} <span class="text-sm text-gray-500">(${e.Âge || '?'} ans)</span></div>
-                            ${e.Allergies ? `<div class="text-xs text-red-600"><i class="fas fa-exclamation-triangle"></i> ${e.Allergies}</div>` : ''}
-                            ${e.Absent_Precoché ? '<span class="text-xs bg-yellow-100 px-2 py-1 rounded">⚠️ Signalé absent</span>' : ''}
-                        </div>
-                        <div class="flex space-x-2">
-                            <button class="present-btn px-4 py-2 rounded-lg font-bold ${present ? 'bg-green-500 text-white' : 'bg-gray-200'}"><i class="fas fa-check"></i> Présent</button>
-                            <button class="absent-btn px-4 py-2 rounded-lg font-bold ${absent ? 'bg-red-500 text-white' : 'bg-gray-200'}"><i class="fas fa-times"></i> Absent</button>
-                        </div>
-                    </div>
-                    <input type="text" placeholder="Commentaire" class="comment-input w-full mt-2 p-2 border rounded" value="${d.commentaire || ''}">
-                </div>
-            `;
-        });
-        const presents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Présent').length;
-        const absents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Absent').length;
-        document.getElementById('content').innerHTML = `
-            <div class="mb-4">
-                <h2 class="text-xl font-bold">Appel Bus ${currentBus}</h2>
-                <div class="grid grid-cols-3 gap-2 mt-2">
-                    <div class="bg-green-100 p-2 rounded text-center"><span class="font-bold">${presents}</span> Présents</div>
-                    <div class="bg-red-100 p-2 rounded text-center"><span class="font-bold">${absents}</span> Absents</div>
-                    <div class="bg-gray-100 p-2 rounded text-center"><span class="font-bold">${enfantsList.length - presents - absents}</span> Restants</div>
-                </div>
-            </div>
-            <div class="space-y-2 mb-24">${items}</div>
-            <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t no-print">
-                <button id="valider-appel-btn" class="w-full bg-blue-600 text-white btn-tactile rounded-lg py-4">Valider l'appel</button>
-            </div>
-        `;
-        document.querySelectorAll('.present-btn').forEach(btn => btn.addEventListener('click', e => {
-            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
-            const cur = appelsEnCours.get(id) || { commentaire: '' };
-            cur.statut = 'Présent';
-            appelsEnCours.set(id, cur);
-            renderAppel();
-        }));
-        document.querySelectorAll('.absent-btn').forEach(btn => btn.addEventListener('click', e => {
-            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
-            const cur = appelsEnCours.get(id) || { commentaire: '' };
-            cur.statut = 'Absent';
-            appelsEnCours.set(id, cur);
-            renderAppel();
-        }));
-        document.querySelectorAll('.comment-input').forEach(inp => inp.addEventListener('input', e => {
-            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
-            const cur = appelsEnCours.get(id) || { statut: null };
-            cur.commentaire = e.target.value;
-            appelsEnCours.set(id, cur);
-        }));
-        document.getElementById('valider-appel-btn').addEventListener('click', validerAppel);
-    }
-
-    async function validerAppel() {
-        for (let e of enfantsList) if (!appelsEnCours.get(e.ID)?.statut) return alert('Tous les enfants doivent avoir un statut.');
-        if (!confirm('Confirmer la validation ?')) return;
-        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Enregistrement...</div>`;
-        try {
-            const lignes = [];
-            for (let e of enfantsList) {
-                const d = appelsEnCours.get(e.ID);
-                lignes.push({ ID_Appel: currentAppelId, ID_Enfant: e.ID, Statut: d.statut, Commentaire: d.commentaire || null });
-            }
-            await supabase.from('Lignes_Appel').insert(lignes);
-            await supabase.from('Appels').update({ Terminé: true, Heure_Validation: new Date().toISOString() }).eq('ID', currentAppelId);
-            alert('Appel validé !');
-            currentAppelId = null;
-            showView('select-bus');
-        } catch (e) {
-            alert('Erreur : ' + e.message);
-            showView('appel');
-        }
-    }
-
-    function renderAdminDashboard() {
-        document.getElementById('content').innerHTML = `
-            <div class="space-y-6">
-                <h2 class="text-2xl font-bold text-center">Admin</h2>
-                <button id="admin-enfants-btn" class="w-full bg-indigo-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-users mr-2"></i>Gérer les enfants</button>
-                <button id="admin-rapports-btn" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-print mr-2"></i>Rapports du jour</button>
-            </div>
-        `;
-        document.getElementById('admin-enfants-btn').addEventListener('click', () => showView('admin-enfants'));
-        document.getElementById('admin-rapports-btn').addEventListener('click', () => showView('admin-rapports'));
-    }
-
-    async function renderAdminEnfants() {
-        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>`;
-        try {
-            const { data: enfants, error } = await supabase.from('Enfants').select('*').order('Nom');
-            if (error) throw error;
-            let rows = '';
-            enfants.forEach(e => {
-                rows += `<tr><td>${e.Nom} ${e.Prenom}</td><td>${e.Âge||''}</td><td>${e.Allergies||''}</td><td><input type="checkbox" ${e.Absent_Precoché?'checked':''} data-id="${e.ID}" class="precoch-check"></td><td><button class="delete-enfant text-red-500" data-id="${e.ID}"><i class="fas fa-trash"></i></button></td></tr>`;
-            });
-            document.getElementById('content').innerHTML = `
-                <div class="mb-4 flex justify-between"><h3 class="text-xl font-bold">Enfants</h3><button id="back-dash" class="text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button></div>
-                <table class="w-full"><thead><tr><th>Nom</th><th>Âge</th><th>Allergies</th><th>Absent précoché</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-                <div class="mt-6"><h4>Ajouter un enfant</h4><form id="add-enfant-form" class="space-y-2">
-                    <input type="text" id="new-nom" placeholder="Nom" class="w-full p-2 border rounded" required>
-                    <input type="text" id="new-prenom" placeholder="Prénom" class="w-full p-2 border rounded" required>
-                    <input type="number" id="new-age" placeholder="Âge" class="w-full p-2 border rounded">
-                    <input type="text" id="new-groupe" placeholder="Groupe" class="w-full p-2 border rounded">
-                    <input type="text" id="new-allergies" placeholder="Allergies" class="w-full p-2 border rounded">
-                    <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded">Ajouter</button>
-                </form></div>
-            `;
-            document.getElementById('back-dash').addEventListener('click', () => showView('admin-dashboard'));
-            document.querySelectorAll('.precoch-check').forEach(cb => cb.addEventListener('change', async e => {
-                await supabase.from('Enfants').update({ Absent_Precoché: e.target.checked }).eq('ID', e.target.dataset.id);
-            }));
-            document.querySelectorAll('.delete-enfant').forEach(btn => btn.addEventListener('click', async e => {
-                if (confirm('Supprimer ?')) {
-                    await supabase.from('Enfants').delete().eq('ID', e.currentTarget.dataset.id);
-                    renderAdminEnfants();
-                }
-            }));
-            document.getElementById('add-enfant-form').addEventListener('submit', async e => {
-                e.preventDefault();
-                const data = {
-                    Nom: document.getElementById('new-nom').value,
-                    Prenom: document.getElementById('new-prenom').value,
-                    Âge: parseInt(document.getElementById('new-age').value) || null,
-                    Groupe: document.getElementById('new-groupe').value,
-                    Allergies: document.getElementById('new-allergies').value,
-                    Absent_Precoché: false
-                };
-                await supabase.from('Enfants').insert([data]);
-                renderAdminEnfants();
-            });
-        } catch (e) {
-            alert('Erreur : ' + e.message);
-            showView('admin-dashboard');
-        }
-    }
-
-    async function renderAdminRapports() {
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>`;
-        try {
-            const { data: appels } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('Date', today).eq('Terminé', true);
-            if (!appels || appels.length === 0) {
-                document.getElementById('content').innerHTML = `<p>Aucun appel terminé aujourd'hui.</p><button id="back-dash2" class="mt-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>`;
-                document.getElementById('back-dash2').addEventListener('click', () => showView('admin-dashboard'));
+            if (!identifiant) {
+                errorDiv.textContent = 'Veuillez entrer un identifiant';
                 return;
             }
-            let options = '';
-            appels.forEach(a => options += `<option value="${a.ID}">Bus ${a.Bus_Num} - ${a.Coachs?.Nom || '?'}</option>`);
-            document.getElementById('content').innerHTML = `
-                <button id="back-dash2" class="mb-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>
-                <h3>Rapports du ${today}</h3>
-                <select id="appel-select" class="w-full p-3 border rounded mb-4">${options}</select>
-                <button id="preview-print" class="w-full bg-green-600 text-white btn-tactile rounded-lg"><i class="fas fa-print"></i> Imprimer</button>
-            `;
-            document.getElementById('back-dash2').addEventListener('click', () => showView('admin-dashboard'));
-            document.getElementById('preview-print').addEventListener('click', async () => {
-                const appelId = document.getElementById('appel-select').value;
-                const { data: appel } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('ID', appelId).single();
-                const { data: lignes } = await supabase.from('Lignes_Appel').select('*, Enfants(*)').eq('ID_Appel', appelId);
-                document.getElementById('print-date').innerText = new Date(appel.Date).toLocaleDateString('fr-FR');
-                document.getElementById('print-bus-info').innerHTML = `Bus ${appel.Bus_Num} - Coach ${appel.Coachs?.Nom}`;
-                const tbody = document.getElementById('print-tbody');
-                tbody.innerHTML = '';
-                lignes.forEach(l => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td>${l.Enfants?.Prenom} ${l.Enfants?.Nom}</td><td>${l.Enfants?.Âge||''}</td><td>${l.Enfants?.Groupe||''}</td><td>${l.Enfants?.Allergies||''}</td><td>${l.Statut}</td><td>${l.Commentaire||''}</td>`;
-                    tbody.appendChild(row);
-                });
-                window.print();
-            });
-        } catch (e) {
-            alert('Erreur : ' + e.message);
-            showView('admin-dashboard');
-        }
-    }
 
-    // ===================== DÉMARRAGE =====================
-    document.addEventListener('DOMContentLoaded', () => {
-        showView('login');
-        document.getElementById('logout-btn').addEventListener('click', logout);
-    });
-</script>
+            // Super admin
+            if (identifiant.toLowerCase() === 'superadmin') {
+                localStorage.setItem('coachbus_user', JSON.stringify({
+                    id: 'super',
+                    identifiant_simple: 'superadmin',
+                    nom: 'Super Admin',
+                    role: 'super-admin'
+                }));
+                window.location.href = 'admin.html';
+                return;
+            }
+
+            try {
+                const { data: coach, error } = await supabase
+                    .from('Coachs')
+                    .select('*')
+                    .eq('Identifiant_Simple', identifiant)
+                    .maybeSingle();
+
+                if (error) {
+                    if (error.code === '42P01') {
+                        errorDiv.textContent = 'Tables non créées. Exécutez le script SQL dans Supabase.';
+                    } else {
+                        errorDiv.textContent = 'Erreur: ' + error.message;
+                    }
+                    return;
+                }
+
+                if (!coach) {
+                    errorDiv.textContent = 'Identifiant inconnu';
+                    return;
+                }
+
+                // Stocker l'utilisateur dans localStorage
+                localStorage.setItem('coachbus_user', JSON.stringify({
+                    id: coach.ID,
+                    identifiant_simple: coach.Identifiant_Simple,
+                    nom: coach.Nom,
+                    role: coach.Role || 'coach'
+                }));
+
+                // Redirection selon le rôle
+                if (coach.Role === 'admin' || coach.Role === 'super-admin') {
+                    window.location.href = 'admin.html';
+                } else {
+                    window.location.href = 'coach.html';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Erreur: ' + e.message;
+            }
+        });
+
+        // Entrée avec touche Entrée
+        document.getElementById('identifiant').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('login-btn').click();
+        });
+
+        // Si déjà connecté, rediriger
+        const userStr = localStorage.getItem('coachbus_user');
+        if (userStr) {
+            const user = JSON.parse(userStr);
+            if (user.role === 'admin' || user.role === 'super-admin') {
+                window.location.href = 'admin.html';
+            } else {
+                window.location.href = 'coach.html';
+            }
+        }
+    </script>
 </body>
 </html>
