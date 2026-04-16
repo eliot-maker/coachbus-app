@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>CoachBus - Coach</title>
+    <title>CoachBus · Coach</title>
+    <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         .btn-tactile { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 600; }
         .list-item { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
@@ -18,179 +18,109 @@
 
 <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-xl relative">
     <header class="p-4 border-b flex justify-between items-center bg-white">
-        <h1 class="text-xl font-bold text-blue-600"><i class="fas fa-bus mr-2"></i>CoachBus</h1>
+        <h1 class="text-xl font-bold text-blue-600">🚌 CoachBus</h1>
         <div id="user-info" class="text-sm"></div>
-        <button id="logout-btn" class="text-gray-500"><i class="fas fa-sign-out-alt"></i></button>
+        <button id="logout-btn" class="text-gray-500">↪️</button>
     </header>
     <main id="content" class="p-4"></main>
 </div>
 
 <script>
-    const userStr = localStorage.getItem('coachbus_user');
-    if (!userStr) window.location.href = 'index.html';
-    const currentUser = JSON.parse(userStr);
-    if (currentUser.role !== 'coach') window.location.href = 'admin.html';
+    (function(){
+        const userStr = localStorage.getItem('coachbus_user');
+        if (!userStr) window.location.href = 'index.html';
+        const currentUser = JSON.parse(userStr);
+        if (currentUser.role !== 'coach') window.location.href = 'admin.html';
 
-    const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    let currentAppelId = null, currentBus = null, enfantsList = [];
-    let appelsEnCours = new Map();
+        let currentAppelId = null, currentBus = null, enfantsList = [];
+        let appelsEnCours = new Map();
 
-    document.getElementById('user-info').innerHTML = `
-        <span class="font-medium">${currentUser.nom}</span>
-        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full ml-2">Coach</span>
-    `;
-    document.getElementById('logout-btn').addEventListener('click', () => {
-        localStorage.removeItem('coachbus_user');
-        window.location.href = 'index.html';
-    });
-
-    function showView(view) {
-        if (view === 'select-bus') renderSelectBus();
-        else if (view === 'appel') renderAppel();
-    }
-
-    function renderSelectBus() {
-        document.getElementById('content').innerHTML = `
-            <div class="flex flex-col items-center justify-center min-h-[70vh] space-y-6">
-                <h2 class="text-xl font-semibold">Bonjour ${currentUser.nom}</h2>
-                <p class="text-gray-600">Choisissez le bus :</p>
-                <button id="bus1" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6 text-2xl"><i class="fas fa-bus mr-3"></i>BUS 1</button>
-                <button id="bus2" class="w-full bg-blue-500 text-white btn-tactile rounded-xl py-6 text-2xl"><i class="fas fa-bus mr-3"></i>BUS 2</button>
-            </div>
-        `;
-        document.getElementById('bus1').addEventListener('click', () => startAppel('1'));
-        document.getElementById('bus2').addEventListener('click', () => startAppel('2'));
-    }
-
-    async function startAppel(busNum) {
-        currentBus = busNum;
-        document.getElementById('content').innerHTML = `<div class="text-center py-20"><i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i><p>Préparation...</p></div>`;
-        try {
-            const { data: appel, error } = await supabase.from('Appels').insert([{
-                Date: new Date().toISOString().split('T')[0],
-                Bus_Num: parseInt(busNum),
-                Coach_ID: currentUser.id,
-                Terminé: false
-            }]).select().single();
-            if (error) throw error;
-            currentAppelId = appel.ID;
-
-            const { data: enfants, error: errEnf } = await supabase.from('Enfants').select('*').order('Nom');
-            if (errEnf) throw errEnf;
-            enfantsList = enfants || [];
-            appelsEnCours.clear();
-            enfantsList.forEach(e => {
-                appelsEnCours.set(e.ID, { statut: e.Absent_Precoché ? 'Absent' : null, commentaire: '' });
-            });
-            showView('appel');
-        } catch (e) {
-            alert('Erreur création appel : ' + e.message);
-            renderSelectBus();
-        }
-    }
-
-    function renderAppel() {
-        let itemsHtml = '';
-        enfantsList.forEach(enfant => {
-            const data = appelsEnCours.get(enfant.ID) || { statut: null, commentaire: '' };
-            const isPresent = data.statut === 'Présent';
-            const isAbsent = data.statut === 'Absent';
-            itemsHtml += `
-                <div class="list-item bg-white" data-enfant-id="${enfant.ID}">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <div class="font-medium text-lg">${enfant.Prenom} ${enfant.Nom} <span class="text-sm text-gray-500">(${enfant.Âge || '?'} ans)</span></div>
-                            ${enfant.Allergies ? `<div class="text-xs text-red-600"><i class="fas fa-exclamation-triangle mr-1"></i>${enfant.Allergies}</div>` : ''}
-                            ${enfant.Absent_Precoché ? '<span class="inline-block text-xs bg-yellow-100 px-2 py-1 rounded mt-1">⚠️ Signalé absent</span>' : ''}
-                        </div>
-                        <div class="flex space-x-2">
-                            <button class="present-btn px-4 py-2 rounded-lg font-bold ${isPresent ? 'bg-green-500 text-white' : 'bg-gray-200'}"><i class="fas fa-check mr-1"></i>Présent</button>
-                            <button class="absent-btn px-4 py-2 rounded-lg font-bold ${isAbsent ? 'bg-red-500 text-white' : 'bg-gray-200'}"><i class="fas fa-times mr-1"></i>Absent</button>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <input type="text" placeholder="Commentaire" class="comment-input w-full p-2 border rounded-lg text-sm" value="${data.commentaire || ''}">
-                    </div>
-                </div>
-            `;
+        document.getElementById('user-info').innerHTML = `${currentUser.nom} <span class="bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs ml-2">Coach</span>`;
+        document.getElementById('logout-btn').addEventListener('click', ()=>{
+            localStorage.removeItem('coachbus_user');
+            window.location.href='index.html';
         });
 
-        const presents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Présent').length;
-        const absents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Absent').length;
-        const restants = enfantsList.length - presents - absents;
+        function showView(v){ v==='select-bus' ? renderSelectBus() : renderAppel(); }
 
-        const html = `
-            <div class="mb-4">
-                <h2 class="text-xl font-bold"><i class="fas fa-clipboard-list mr-2 text-blue-600"></i>Appel Bus ${currentBus}</h2>
-                <div class="grid grid-cols-3 gap-2 mt-4">
-                    <div class="bg-green-100 rounded-lg p-3 text-center"><span class="text-2xl font-bold text-green-700">${presents}</span><div class="text-xs">Présents</div></div>
-                    <div class="bg-red-100 rounded-lg p-3 text-center"><span class="text-2xl font-bold text-red-700">${absents}</span><div class="text-xs">Absents</div></div>
-                    <div class="bg-gray-100 rounded-lg p-3 text-center"><span class="text-2xl font-bold text-gray-700">${restants}</span><div class="text-xs">À valider</div></div>
-                </div>
-            </div>
-            <div class="space-y-1 mb-24">${itemsHtml}</div>
-            <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t border-gray-200">
-                <button id="valider-appel-btn" class="w-full bg-blue-600 text-white btn-tactile rounded-lg py-4 text-lg shadow-md">
-                    <i class="fas fa-check-circle mr-2"></i>Valider l'appel (${presents + absents}/${enfantsList.length})
-                </button>
-            </div>
-        `;
-        document.getElementById('content').innerHTML = html;
-
-        document.querySelectorAll('.present-btn').forEach(btn => btn.addEventListener('click', e => {
-            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
-            const cur = appelsEnCours.get(id) || { commentaire: '' };
-            cur.statut = 'Présent';
-            appelsEnCours.set(id, cur);
-            renderAppel();
-        }));
-        document.querySelectorAll('.absent-btn').forEach(btn => btn.addEventListener('click', e => {
-            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
-            const cur = appelsEnCours.get(id) || { commentaire: '' };
-            cur.statut = 'Absent';
-            appelsEnCours.set(id, cur);
-            renderAppel();
-        }));
-        document.querySelectorAll('.comment-input').forEach(inp => inp.addEventListener('input', e => {
-            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
-            const cur = appelsEnCours.get(id) || { statut: null };
-            cur.commentaire = e.target.value;
-            appelsEnCours.set(id, cur);
-        }));
-        document.getElementById('valider-appel-btn').addEventListener('click', validerAppel);
-    }
-
-    async function validerAppel() {
-        for (let e of enfantsList) {
-            if (!appelsEnCours.get(e.ID)?.statut) {
-                alert(`❌ Statut manquant pour ${e.Prenom} ${e.Nom}`);
-                return;
-            }
+        function renderSelectBus(){
+            document.getElementById('content').innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-[70vh] space-y-6">
+                    <h2 class="text-xl font-semibold">Bonjour ${currentUser.nom}</h2>
+                    <button id="bus1" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6 text-2xl">🚌 BUS 1</button>
+                    <button id="bus2" class="w-full bg-blue-500 text-white btn-tactile rounded-xl py-6 text-2xl">🚌 BUS 2</button>
+                </div>`;
+            document.getElementById('bus1').onclick = ()=>startAppel('1');
+            document.getElementById('bus2').onclick = ()=>startAppel('2');
         }
-        if (!confirm('Confirmer la validation de cet appel ?')) return;
 
-        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner loading-spinner text-3xl mb-2"></i><p>Enregistrement...</p></div>`;
-        try {
+        async function startAppel(busNum){
+            currentBus=busNum;
+            document.getElementById('content').innerHTML=`<div class="text-center py-20">Chargement...</div>`;
+            try{
+                const {data: appel, error} = await supabase.from('Appels').insert([{
+                    Date: new Date().toISOString().split('T')[0], Bus_Num: parseInt(busNum), Coach_ID: currentUser.id, Terminé: false
+                }]).select().single();
+                if(error) throw error;
+                currentAppelId = appel.ID;
+                const {data: enfants, error: errEnf} = await supabase.from('Enfants').select('*').order('Nom');
+                if(errEnf) throw errEnf;
+                enfantsList = enfants||[];
+                appelsEnCours.clear();
+                enfantsList.forEach(e=> appelsEnCours.set(e.ID, {statut: e.Absent_Precoché?'Absent':null, commentaire:''}));
+                showView('appel');
+            }catch(e){ alert('Erreur appel'); renderSelectBus(); }
+        }
+
+        function renderAppel(){
+            let items='';
+            enfantsList.forEach(e=>{
+                const d = appelsEnCours.get(e.ID)||{};
+                const present = d.statut==='Présent', absent = d.statut==='Absent';
+                items+=`<div class="list-item" data-id="${e.ID}">
+                    <div class="flex justify-between"><div><b>${e.Prenom} ${e.Nom}</b> (${e.Âge||'?'} ans)
+                    ${e.Allergies?`<div class="text-red-500 text-xs">⚠️ ${e.Allergies}</div>`:''}
+                    ${e.Absent_Precoché?'<span class="bg-yellow-100 text-xs px-2 py-1 rounded">Signalé absent</span>':''}</div>
+                    <div class="flex gap-2"><button class="present-btn px-4 py-2 rounded ${present?'bg-green-500 text-white':'bg-gray-200'}">Présent</button>
+                    <button class="absent-btn px-4 py-2 rounded ${absent?'bg-red-500 text-white':'bg-gray-200'}">Absent</button></div></div>
+                    <input type="text" placeholder="Commentaire" class="comment-input w-full mt-2 p-2 border rounded" value="${d.commentaire||''}">
+                </div>`;
+            });
+            const presents = Array.from(appelsEnCours.values()).filter(v=>v.statut==='Présent').length;
+            const absents = Array.from(appelsEnCours.values()).filter(v=>v.statut==='Absent').length;
+            document.getElementById('content').innerHTML = `
+                <h2 class="text-xl font-bold mb-4">Appel Bus ${currentBus}</h2>
+                <div class="grid grid-cols-3 gap-2 mb-4"><div class="bg-green-100 p-2 rounded text-center">${presents} Présents</div><div class="bg-red-100 p-2 rounded text-center">${absents} Absents</div><div class="bg-gray-100 p-2 rounded text-center">${enfantsList.length-presents-absents} Restants</div></div>
+                <div class="space-y-1 mb-24">${items}</div>
+                <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t"><button id="valider" class="w-full bg-blue-600 text-white btn-tactile rounded-lg py-4">Valider l'appel</button></div>`;
+            document.querySelectorAll('.present-btn').forEach(b=>b.onclick=e=>updateStatut(e,'Présent'));
+            document.querySelectorAll('.absent-btn').forEach(b=>b.onclick=e=>updateStatut(e,'Absent'));
+            document.querySelectorAll('.comment-input').forEach(i=>i.oninput=e=>updateComment(e));
+            document.getElementById('valider').onclick=validerAppel;
+        }
+
+        function updateStatut(e,statut){ const id=parseInt(e.target.closest('[data-id]').dataset.id); const cur=appelsEnCours.get(id)||{}; cur.statut=statut; appelsEnCours.set(id,cur); renderAppel(); }
+        function updateComment(e){ const id=parseInt(e.target.closest('[data-id]').dataset.id); const cur=appelsEnCours.get(id)||{}; cur.commentaire=e.target.value; appelsEnCours.set(id,cur); }
+
+        async function validerAppel(){
+            for(let e of enfantsList) if(!appelsEnCours.get(e.ID)?.statut) return alert('Statut manquant pour '+e.Prenom);
+            if(!confirm('Valider ?')) return;
+            document.getElementById('content').innerHTML=`<div class="text-center py-20">Enregistrement...</div>`;
             const lignes = [];
-            for (let e of enfantsList) {
-                const d = appelsEnCours.get(e.ID);
-                lignes.push({ ID_Appel: currentAppelId, ID_Enfant: e.ID, Statut: d.statut, Commentaire: d.commentaire || null });
-            }
+            for(let e of enfantsList){ const d=appelsEnCours.get(e.ID); lignes.push({ID_Appel:currentAppelId, ID_Enfant:e.ID, Statut:d.statut, Commentaire:d.commentaire||null}); }
             await supabase.from('Lignes_Appel').insert(lignes);
-            await supabase.from('Appels').update({ Terminé: true, Heure_Validation: new Date().toISOString() }).eq('ID', currentAppelId);
-            alert('✅ Appel validé !');
-            currentAppelId = null;
+            await supabase.from('Appels').update({Terminé:true, Heure_Validation:new Date().toISOString()}).eq('ID',currentAppelId);
+            alert('Validé !');
+            currentAppelId=null;
             renderSelectBus();
-        } catch (e) {
-            alert('Erreur validation : ' + e.message);
-            renderAppel();
         }
-    }
 
-    renderSelectBus();
+        renderSelectBus();
+    })();
 </script>
 </body>
 </html>

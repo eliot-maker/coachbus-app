@@ -3,100 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoachBus - Test</title>
+    <title>CoachBus · Connexion</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        * { box-sizing: border-box; margin: 0; }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .card {
+            background: white;
+            border-radius: 24px;
+            padding: 28px 24px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+        h1 {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 28px;
+            font-weight: 600;
+            color: #1e3a8a;
+            margin-bottom: 24px;
+        }
+        input {
+            width: 100%;
+            padding: 18px 16px;
+            font-size: 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 18px;
+            margin-bottom: 20px;
+            transition: border 0.2s;
+        }
+        input:focus {
+            border-color: #3b82f6;
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: 600;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 18px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #1d4ed8; }
+        button:disabled { opacity: 0.6; cursor: default; }
+        #status {
+            margin-top: 16px;
+            color: #dc2626;
+            text-align: center;
+            min-height: 24px;
+        }
+        #log {
+            margin-top: 20px;
+            font-size: 13px;
+            color: #4b5563;
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 14px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .bus-icon { font-size: 32px; }
+    </style>
+    <!-- Supabase via global (non-module) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body style="font-family: Arial; padding: 20px;">
-    <h2>Test de connexion</h2>
-    <input type="text" id="identifiant" placeholder="Identifiant" style="padding:10px;font-size:16px;width:100%;margin-bottom:10px;">
-    <button id="login-btn" style="padding:15px;font-size:18px;width:100%;background:blue;color:white;border:none;">Accéder</button>
-    <div id="status" style="margin-top:20px;color:gray;"></div>
+<body>
+<div class="card">
+    <h1>
+        <span class="bus-icon">🚌</span> CoachBus
+    </h1>
+    <input type="text" id="identifiant" placeholder="Votre identifiant" autocomplete="off" autofocus>
+    <button id="login-btn">Accéder</button>
+    <div id="status"></div>
+    <div id="log"></div>
+</div>
 
-    <script>
+<script>
+    (function() {
+        // ---------- CONFIG ----------
         const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
         
-        const statusDiv = document.getElementById('status');
-        const log = (msg) => { statusDiv.innerHTML += '<br>' + msg; console.log(msg); };
-        
-        log('Initialisation Supabase...');
+        // Initialisation Supabase (global)
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        log('✅ Client créé');
-
-        document.getElementById('login-btn').addEventListener('click', async () => {
-            const identifiant = document.getElementById('identifiant').value.trim();
-            log('Identifiant saisi : "' + identifiant + '"');
+        
+        const logDiv = document.getElementById('log');
+        const statusDiv = document.getElementById('status');
+        const btn = document.getElementById('login-btn');
+        const input = document.getElementById('identifiant');
+        
+        function addLog(msg, isError = false) {
+            const line = document.createElement('div');
+            line.textContent = '→ ' + msg;
+            line.style.color = isError ? '#dc2626' : '#374151';
+            logDiv.appendChild(line);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        addLog('✓ Prêt');
+        
+        // Test rapide Supabase (silencieux)
+        (async () => {
+            try {
+                const { error } = await supabase.from('Coachs').select('count', { count: 'exact', head: true });
+                if (error) {
+                    addLog('⚠️ Supabase: ' + error.message, true);
+                } else {
+                    addLog('✓ Connecté à Supabase');
+                }
+            } catch (e) {
+                addLog('✗ Erreur Supabase: ' + e.message, true);
+            }
+        })();
+        
+        // Action de connexion
+        async function handleLogin() {
+            const identifiant = input.value.trim();
+            addLog('Tentative avec "' + identifiant + '"');
+            statusDiv.textContent = '';
             
             if (!identifiant) {
-                alert('Veuillez entrer un identifiant');
+                statusDiv.textContent = 'Veuillez entrer un identifiant';
                 return;
             }
-
-            // Test superadmin
-            if (identifiant.toLowerCase() === 'superadmin') {
-                log('➡️ Superadmin détecté');
-                try {
-                    localStorage.setItem('coachbus_user', JSON.stringify({ id: 'super', nom: 'Super Admin', role: 'super-admin' }));
-                    log('✅ localStorage OK');
-                    alert('Redirection vers admin.html (superadmin)');
-                    window.location.href = 'admin.html';
-                } catch(e) {
-                    alert('Erreur localStorage : ' + e.message);
-                }
-                return;
-            }
-
-            log('🔍 Recherche dans la table Coachs...');
+            
+            btn.disabled = true;
+            btn.textContent = 'Connexion...';
+            
             try {
-                const { data, error } = await supabase
+                // Super admin (hardcodé)
+                if (identifiant.toLowerCase() === 'superadmin') {
+                    addLog('✓ Superadmin reconnu');
+                    localStorage.setItem('coachbus_user', JSON.stringify({
+                        id: 'super',
+                        identifiant_simple: 'superadmin',
+                        nom: 'Super Admin',
+                        role: 'super-admin'
+                    }));
+                    window.location.href = 'admin.html';
+                    return;
+                }
+                
+                addLog('Recherche dans la base...');
+                const { data: coach, error } = await supabase
                     .from('Coachs')
                     .select('*')
                     .eq('Identifiant_Simple', identifiant)
                     .maybeSingle();
-
+                
                 if (error) {
-                    log('❌ Erreur Supabase : ' + error.message + ' (code: ' + error.code + ')');
-                    alert('Erreur Supabase : ' + error.message);
+                    addLog('Erreur DB: ' + error.message, true);
+                    statusDiv.textContent = 'Erreur base de données';
+                    btn.disabled = false;
+                    btn.textContent = 'Accéder';
                     return;
                 }
-
-                if (!data) {
-                    log('❌ Aucun coach trouvé');
-                    alert('Identifiant inconnu');
+                
+                if (!coach) {
+                    addLog('Identifiant inconnu', true);
+                    statusDiv.textContent = 'Identifiant inconnu';
+                    btn.disabled = false;
+                    btn.textContent = 'Accéder';
                     return;
                 }
-
-                log('✅ Coach trouvé : ' + data.Nom + ' (rôle: ' + data.Role + ')');
+                
+                addLog('✓ ' + coach.Nom + ' (' + coach.Role + ')');
                 
                 const user = {
-                    id: data.ID,
-                    identifiant_simple: data.Identifiant_Simple,
-                    nom: data.Nom,
-                    role: data.Role || 'coach'
+                    id: coach.ID,
+                    identifiant_simple: coach.Identifiant_Simple,
+                    nom: coach.Nom,
+                    role: coach.Role || 'coach'
                 };
                 
-                try {
-                    localStorage.setItem('coachbus_user', JSON.stringify(user));
-                    log('✅ localStorage OK');
-                } catch(e) {
-                    alert('Erreur localStorage : ' + e.message);
-                    return;
-                }
-
+                localStorage.setItem('coachbus_user', JSON.stringify(user));
+                
                 if (user.role === 'admin' || user.role === 'super-admin') {
-                    log('➡️ Redirection vers admin.html');
-                    alert('Redirection vers admin.html');
                     window.location.href = 'admin.html';
                 } else {
-                    log('➡️ Redirection vers coach.html');
-                    alert('Redirection vers coach.html');
                     window.location.href = 'coach.html';
                 }
             } catch (e) {
-                log('❌ Exception : ' + e.message);
-                alert('Exception : ' + e.message);
+                addLog('Exception: ' + e.message, true);
+                statusDiv.textContent = 'Erreur technique';
+                btn.disabled = false;
+                btn.textContent = 'Accéder';
             }
+        }
+        
+        btn.addEventListener('click', handleLogin);
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
         });
-    </script>
+        
+        // Redirection auto si déjà connecté
+        const userStr = localStorage.getItem('coachbus_user');
+        if (userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                if (user.role === 'admin' || user.role === 'super-admin') {
+                    window.location.href = 'admin.html';
+                } else {
+                    window.location.href = 'coach.html';
+                }
+            } catch(e) {}
+        }
+    })();
+</script>
 </body>
 </html>
