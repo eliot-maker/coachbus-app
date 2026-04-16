@@ -3,116 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoachBus</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>CoachBus - Test</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
-    <div class="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
-        <div class="text-center mb-6">
-            <i class="fas fa-bus text-5xl text-blue-600 mb-3"></i>
-            <h1 class="text-2xl font-bold text-gray-800">CoachBus</h1>
-        </div>
-        <input type="text" id="identifiant" placeholder="Votre identifiant" class="w-full p-4 border border-gray-300 rounded-lg text-lg mb-4 focus:ring-2 focus:ring-blue-500" autofocus>
-        <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg text-lg transition">
-            <i class="fas fa-arrow-right mr-2"></i>Accéder
-        </button>
-        <div id="error-msg" class="text-red-500 text-sm mt-3 text-center"></div>
-    </div>
+<body style="font-family: Arial; padding: 20px;">
+    <h2>Test de connexion</h2>
+    <input type="text" id="identifiant" placeholder="Identifiant" style="padding:10px;font-size:16px;width:100%;margin-bottom:10px;">
+    <button id="login-btn" style="padding:15px;font-size:18px;width:100%;background:blue;color:white;border:none;">Accéder</button>
+    <div id="status" style="margin-top:20px;color:gray;"></div>
 
     <script>
         const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
+        
+        const statusDiv = document.getElementById('status');
+        const log = (msg) => { statusDiv.innerHTML += '<br>' + msg; console.log(msg); };
+        
+        log('Initialisation Supabase...');
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        log('✅ Client créé');
 
-        const loginBtn = document.getElementById('login-btn');
-        const input = document.getElementById('identifiant');
-        const errorDiv = document.getElementById('error-msg');
-
-        async function handleLogin() {
-            const identifiant = input.value.trim();
-            errorDiv.textContent = '';
-
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const identifiant = document.getElementById('identifiant').value.trim();
+            log('Identifiant saisi : "' + identifiant + '"');
+            
             if (!identifiant) {
-                errorDiv.textContent = 'Veuillez entrer un identifiant';
+                alert('Veuillez entrer un identifiant');
                 return;
             }
 
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Connexion...';
-
-            // Super admin
+            // Test superadmin
             if (identifiant.toLowerCase() === 'superadmin') {
-                localStorage.setItem('coachbus_user', JSON.stringify({
-                    id: 'super',
-                    identifiant_simple: 'superadmin',
-                    nom: 'Super Admin',
-                    role: 'super-admin'
-                }));
-                window.location.href = 'admin.html';
+                log('➡️ Superadmin détecté');
+                try {
+                    localStorage.setItem('coachbus_user', JSON.stringify({ id: 'super', nom: 'Super Admin', role: 'super-admin' }));
+                    log('✅ localStorage OK');
+                    alert('Redirection vers admin.html (superadmin)');
+                    window.location.href = 'admin.html';
+                } catch(e) {
+                    alert('Erreur localStorage : ' + e.message);
+                }
                 return;
             }
 
+            log('🔍 Recherche dans la table Coachs...');
             try {
-                const { data: coach, error } = await supabase
+                const { data, error } = await supabase
                     .from('Coachs')
                     .select('*')
                     .eq('Identifiant_Simple', identifiant)
                     .maybeSingle();
 
                 if (error) {
-                    if (error.code === '42P01') {
-                        errorDiv.textContent = 'Tables manquantes. Exécutez le script SQL.';
-                    } else {
-                        errorDiv.textContent = 'Erreur: ' + error.message;
-                    }
-                    loginBtn.disabled = false;
-                    loginBtn.innerHTML = '<i class="fas fa-arrow-right mr-2"></i>Accéder';
+                    log('❌ Erreur Supabase : ' + error.message + ' (code: ' + error.code + ')');
+                    alert('Erreur Supabase : ' + error.message);
                     return;
                 }
 
-                if (!coach) {
-                    errorDiv.textContent = 'Identifiant inconnu';
-                    loginBtn.disabled = false;
-                    loginBtn.innerHTML = '<i class="fas fa-arrow-right mr-2"></i>Accéder';
+                if (!data) {
+                    log('❌ Aucun coach trouvé');
+                    alert('Identifiant inconnu');
                     return;
                 }
 
-                localStorage.setItem('coachbus_user', JSON.stringify({
-                    id: coach.ID,
-                    identifiant_simple: coach.Identifiant_Simple,
-                    nom: coach.Nom,
-                    role: coach.Role || 'coach'
-                }));
+                log('✅ Coach trouvé : ' + data.Nom + ' (rôle: ' + data.Role + ')');
+                
+                const user = {
+                    id: data.ID,
+                    identifiant_simple: data.Identifiant_Simple,
+                    nom: data.Nom,
+                    role: data.Role || 'coach'
+                };
+                
+                try {
+                    localStorage.setItem('coachbus_user', JSON.stringify(user));
+                    log('✅ localStorage OK');
+                } catch(e) {
+                    alert('Erreur localStorage : ' + e.message);
+                    return;
+                }
 
-                if (coach.Role === 'admin' || coach.Role === 'super-admin') {
+                if (user.role === 'admin' || user.role === 'super-admin') {
+                    log('➡️ Redirection vers admin.html');
+                    alert('Redirection vers admin.html');
                     window.location.href = 'admin.html';
                 } else {
+                    log('➡️ Redirection vers coach.html');
+                    alert('Redirection vers coach.html');
                     window.location.href = 'coach.html';
                 }
             } catch (e) {
-                errorDiv.textContent = 'Erreur: ' + e.message;
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = '<i class="fas fa-arrow-right mr-2"></i>Accéder';
+                log('❌ Exception : ' + e.message);
+                alert('Exception : ' + e.message);
             }
-        }
-
-        loginBtn.addEventListener('click', handleLogin);
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleLogin();
         });
-
-        // Redirection si déjà connecté
-        const userStr = localStorage.getItem('coachbus_user');
-        if (userStr) {
-            const user = JSON.parse(userStr);
-            if (user.role === 'admin' || user.role === 'super-admin') {
-                window.location.href = 'admin.html';
-            } else {
-                window.location.href = 'coach.html';
-            }
-        }
     </script>
 </body>
 </html>
