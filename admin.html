@@ -10,7 +10,7 @@
     <style>
         .btn-tactile { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 600; }
         @media print {
-            .no-print, header, button:not(.print-keep) { display: none !important; }
+            header, button, .no-print { display: none !important; }
             body { background: white; padding: 1cm; }
             .print-only { display: block !important; }
         }
@@ -19,8 +19,8 @@
 </head>
 <body class="bg-gray-50">
 
-<div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-xl relative">
-    <header class="p-4 border-b flex justify-between items-center bg-white no-print">
+<div class="max-w-md mx-auto min-h-screen bg-white shadow-xl relative">
+    <header class="p-4 border-b flex justify-between items-center bg-white">
         <h1 class="text-xl font-bold text-blue-600"><i class="fas fa-bus mr-2"></i>CoachBus Admin</h1>
         <div id="user-info" class="text-sm"></div>
         <button id="logout-btn" class="text-gray-500"><i class="fas fa-sign-out-alt"></i></button>
@@ -28,26 +28,19 @@
     <main id="content" class="p-4"></main>
 </div>
 
-<!-- Template impression -->
+<!-- Template d'impression -->
 <div id="print-template" class="print-only container mx-auto p-4">
-    <div class="print-header"><span>Rapport de Présence</span><span id="print-date"></span></div>
-    <div id="print-bus-info" class="mb-4 text-lg"></div>
-    <table class="print-table w-full border-collapse border">
-        <thead><tr><th class="border p-2">Enfant</th><th>Âge</th><th>Groupe</th><th>Allergies</th><th>Statut</th><th>Commentaire</th></tr></thead>
-        <tbody id="print-tbody"></tbody>
-    </table>
+    <h2>Rapport de Présence</h2>
+    <div id="print-date"></div>
+    <div id="print-bus-info" class="mb-4"></div>
+    <table class="w-full border-collapse border"><thead><tr><th>Enfant</th><th>Âge</th><th>Statut</th><th>Commentaire</th></tr></thead><tbody id="print-tbody"></tbody></table>
 </div>
 
 <script>
-    // Vérifier connexion
     const userStr = localStorage.getItem('coachbus_user');
-    if (!userStr) {
-        window.location.href = 'index.html';
-    }
+    if (!userStr) window.location.href = 'index.html';
     const currentUser = JSON.parse(userStr);
-    if (currentUser.role !== 'admin' && currentUser.role !== 'super-admin') {
-        window.location.href = 'coach.html';
-    }
+    if (currentUser.role !== 'admin' && currentUser.role !== 'super-admin') window.location.href = 'coach.html';
 
     const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
@@ -55,74 +48,75 @@
 
     document.getElementById('user-info').innerHTML = `
         <span class="font-medium">${currentUser.nom}</span>
-        <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full ml-2">Admin</span>
+        <span class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full ml-2">Admin</span>
     `;
     document.getElementById('logout-btn').addEventListener('click', () => {
         localStorage.removeItem('coachbus_user');
         window.location.href = 'index.html';
     });
 
-    function showView(viewName) {
-        switch(viewName) {
-            case 'dashboard': renderDashboard(); break;
-            case 'enfants': renderEnfants(); break;
-            case 'rapports': renderRapports(); break;
-            default: renderDashboard();
-        }
+    function showView(view) {
+        if (view === 'dashboard') renderDashboard();
+        else if (view === 'enfants') renderEnfants();
+        else if (view === 'rapports') renderRapports();
     }
 
     function renderDashboard() {
         document.getElementById('content').innerHTML = `
             <div class="space-y-4">
                 <h2 class="text-2xl font-bold text-center mb-6">Administration</h2>
-                <button id="enfants-btn" class="w-full bg-indigo-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-users mr-2"></i>Gérer les enfants</button>
-                <button id="rapports-btn" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-print mr-2"></i>Rapports du jour</button>
+                <button id="btn-enfants" class="w-full bg-indigo-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-users mr-2"></i>Gérer les enfants</button>
+                <button id="btn-rapports" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-print mr-2"></i>Rapports du jour</button>
             </div>
         `;
-        document.getElementById('enfants-btn').addEventListener('click', () => showView('enfants'));
-        document.getElementById('rapports-btn').addEventListener('click', () => showView('rapports'));
+        document.getElementById('btn-enfants').addEventListener('click', () => showView('enfants'));
+        document.getElementById('btn-rapports').addEventListener('click', () => showView('rapports'));
     }
 
     async function renderEnfants() {
-        document.getElementById('content').innerHTML = `<div class="text-center py-10">Chargement...</div>`;
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>`;
         try {
-            const { data: enfants } = await supabase.from('Enfants').select('*').order('Nom');
+            const { data: enfants, error } = await supabase.from('Enfants').select('*').order('Nom');
+            if (error) throw error;
+            
             let rows = '';
             enfants.forEach(e => {
                 rows += `<tr><td class="py-2">${e.Nom} ${e.Prenom}</td><td>${e.Âge||'-'}</td><td>${e.Allergies||''}</td>
                     <td><input type="checkbox" ${e.Absent_Precoché?'checked':''} data-id="${e.ID}" class="precoch-check"></td>
-                    <td><button class="delete-btn text-red-500" data-id="${e.ID}"><i class="fas fa-trash"></i></button></td></tr>`;
+                    <td><button class="delete-enfant text-red-500" data-id="${e.ID}"><i class="fas fa-trash"></i></button></td></tr>`;
             });
+            
             document.getElementById('content').innerHTML = `
-                <div class="mb-4 flex justify-between"><h3 class="text-xl font-bold">Enfants</h3><button id="back-btn" class="text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button></div>
+                <div class="mb-4 flex justify-between"><h3 class="text-xl font-bold">Liste des enfants</h3><button id="back-dash" class="text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button></div>
                 <div class="overflow-x-auto mb-6"><table class="w-full text-sm"><thead><tr><th>Nom</th><th>Âge</th><th>Allergies</th><th>Absent précoché</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-                <div class="border-t pt-4"><h4 class="font-semibold mb-2">Ajouter un enfant</h4>
-                    <form id="add-form" class="space-y-2">
-                        <div class="grid grid-cols-2 gap-2"><input id="nom" placeholder="Nom" class="p-2 border rounded" required><input id="prenom" placeholder="Prénom" class="p-2 border rounded" required></div>
-                        <div class="grid grid-cols-2 gap-2"><input id="age" type="number" placeholder="Âge" class="p-2 border rounded"><input id="groupe" placeholder="Groupe" class="p-2 border rounded"></div>
-                        <input id="allergies" placeholder="Allergies" class="w-full p-2 border rounded">
+                <div class="border-t pt-6"><h4 class="font-semibold mb-2">Ajouter un enfant</h4>
+                    <form id="add-enfant-form" class="space-y-2">
+                        <div class="grid grid-cols-2 gap-2"><input type="text" id="new-nom" placeholder="Nom" class="p-2 border rounded" required><input type="text" id="new-prenom" placeholder="Prénom" class="p-2 border rounded" required></div>
+                        <div class="grid grid-cols-2 gap-2"><input type="number" id="new-age" placeholder="Âge" class="p-2 border rounded"><input type="text" id="new-groupe" placeholder="Groupe" class="p-2 border rounded"></div>
+                        <input type="text" id="new-allergies" placeholder="Allergies" class="w-full p-2 border rounded">
                         <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded">Ajouter</button>
                     </form>
                 </div>
             `;
-            document.getElementById('back-btn').addEventListener('click', () => showView('dashboard'));
-            document.querySelectorAll('.precoch-check').forEach(cb => cb.addEventListener('change', async (e) => {
+            document.getElementById('back-dash').addEventListener('click', () => showView('dashboard'));
+            
+            document.querySelectorAll('.precoch-check').forEach(cb => cb.addEventListener('change', async e => {
                 await supabase.from('Enfants').update({ Absent_Precoché: e.target.checked }).eq('ID', e.target.dataset.id);
             }));
-            document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+            document.querySelectorAll('.delete-enfant').forEach(btn => btn.addEventListener('click', async e => {
                 if (confirm('Supprimer ?')) {
                     await supabase.from('Enfants').delete().eq('ID', e.currentTarget.dataset.id);
                     renderEnfants();
                 }
             }));
-            document.getElementById('add-form').addEventListener('submit', async (e) => {
+            document.getElementById('add-enfant-form').addEventListener('submit', async e => {
                 e.preventDefault();
                 const data = {
-                    Nom: document.getElementById('nom').value,
-                    Prenom: document.getElementById('prenom').value,
-                    Âge: parseInt(document.getElementById('age').value) || null,
-                    Groupe: document.getElementById('groupe').value,
-                    Allergies: document.getElementById('allergies').value,
+                    Nom: document.getElementById('new-nom').value,
+                    Prenom: document.getElementById('new-prenom').value,
+                    Âge: parseInt(document.getElementById('new-age').value) || null,
+                    Groupe: document.getElementById('new-groupe').value,
+                    Allergies: document.getElementById('new-allergies').value,
                     Absent_Precoché: false
                 };
                 await supabase.from('Enfants').insert([data]);
@@ -136,37 +130,27 @@
 
     async function renderRapports() {
         const today = new Date().toISOString().split('T')[0];
-        document.getElementById('content').innerHTML = `<div class="text-center py-10">Chargement...</div>`;
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>`;
         try {
-            const { data: appels } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('Date', today).eq('Terminé', true);
+            const { data: appels, error } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('Date', today).eq('Terminé', true);
+            if (error) throw error;
             if (!appels || appels.length === 0) {
-                document.getElementById('content').innerHTML = `<p class="text-center py-10">Aucun appel aujourd'hui.</p><button id="back-btn" class="mt-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>`;
-                document.getElementById('back-btn').addEventListener('click', () => showView('dashboard'));
+                document.getElementById('content').innerHTML = `<p class="text-center py-10">Aucun appel terminé aujourd'hui.</p><button id="back-dash" class="mt-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>`;
+                document.getElementById('back-dash').addEventListener('click', () => showView('dashboard'));
                 return;
             }
             let options = '';
             appels.forEach(a => options += `<option value="${a.ID}">Bus ${a.Bus_Num} - ${a.Coachs?.Nom || '?'}</option>`);
             document.getElementById('content').innerHTML = `
-                <button id="back-btn" class="mb-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>
-                <h3 class="text-xl font-bold mb-4">Rapports du ${new Date(today).toLocaleDateString()}</h3>
+                <button id="back-dash" class="mb-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>
+                <h3 class="text-xl font-bold mb-4">Rapports du ${new Date(today).toLocaleDateString('fr-FR')}</h3>
                 <select id="appel-select" class="w-full p-3 border rounded mb-4">${options}</select>
-                <button id="print-btn" class="w-full bg-green-600 text-white btn-tactile rounded-lg"><i class="fas fa-print mr-2"></i>Imprimer</button>
+                <button id="preview-print" class="w-full bg-green-600 text-white btn-tactile rounded-lg"><i class="fas fa-print mr-2"></i>Imprimer</button>
             `;
-            document.getElementById('back-btn').addEventListener('click', () => showView('dashboard'));
-            document.getElementById('print-btn').addEventListener('click', async () => {
+            document.getElementById('back-dash').addEventListener('click', () => showView('dashboard'));
+            document.getElementById('preview-print').addEventListener('click', async () => {
                 const appelId = document.getElementById('appel-select').value;
-                const { data: appel } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('ID', appelId).single();
-                const { data: lignes } = await supabase.from('Lignes_Appel').select('*, Enfants(*)').eq('ID_Appel', appelId);
-                document.getElementById('print-date').innerText = new Date(appel.Date).toLocaleDateString('fr-FR');
-                document.getElementById('print-bus-info').innerHTML = `Bus ${appel.Bus_Num} - Coach: ${appel.Coachs?.Nom || '?'}`;
-                const tbody = document.getElementById('print-tbody');
-                tbody.innerHTML = '';
-                lignes.forEach(l => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td class="border p-2">${l.Enfants?.Prenom} ${l.Enfants?.Nom}</td><td class="border p-2">${l.Enfants?.Âge||''}</td><td class="border p-2">${l.Enfants?.Groupe||''}</td><td class="border p-2">${l.Enfants?.Allergies||''}</td><td class="border p-2">${l.Statut}</td><td class="border p-2">${l.Commentaire||''}</td>`;
-                    tbody.appendChild(row);
-                });
-                window.print();
+                await preparePrint(appelId);
             });
         } catch (e) {
             alert('Erreur : ' + e.message);
@@ -174,7 +158,20 @@
         }
     }
 
-    showView('dashboard');
+    async function preparePrint(appelId) {
+        const { data: appel } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('ID', appelId).single();
+        const { data: lignes } = await supabase.from('Lignes_Appel').select('*, Enfants(*)').eq('ID_Appel', appelId);
+        document.getElementById('print-date').innerText = new Date(appel.Date).toLocaleDateString('fr-FR');
+        document.getElementById('print-bus-info').innerHTML = `Bus ${appel.Bus_Num} - Coach: ${appel.Coachs?.Nom}`;
+        const tbody = document.getElementById('print-tbody');
+        tbody.innerHTML = '';
+        lignes.forEach(l => {
+            tbody.innerHTML += `<tr><td>${l.Enfants?.Prenom} ${l.Enfants?.Nom}</td><td>${l.Enfants?.Âge||'-'}</td><td>${l.Statut}</td><td>${l.Commentaire||''}</td></tr>`;
+        });
+        window.print();
+    }
+
+    renderDashboard();
 </script>
 </body>
 </html>

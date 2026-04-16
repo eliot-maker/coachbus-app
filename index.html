@@ -74,7 +74,6 @@
                     return;
                 }
 
-                // Stocker l'utilisateur dans localStorage
                 localStorage.setItem('coachbus_user', JSON.stringify({
                     id: coach.ID,
                     identifiant_simple: coach.Identifiant_Simple,
@@ -82,7 +81,6 @@
                     role: coach.Role || 'coach'
                 }));
 
-                // Redirection selon le rôle
                 if (coach.Role === 'admin' || coach.Role === 'super-admin') {
                     window.location.href = 'admin.html';
                 } else {
@@ -93,12 +91,11 @@
             }
         });
 
-        // Entrée avec touche Entrée
         document.getElementById('identifiant').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') document.getElementById('login-btn').click();
         });
 
-        // Si déjà connecté, rediriger
+        // Redirection si déjà connecté
         const userStr = localStorage.getItem('coachbus_user');
         if (userStr) {
             const user = JSON.parse(userStr);
