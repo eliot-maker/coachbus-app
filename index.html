@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#3b82f6">
+    <title>CoachBus - Présences</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="data:application/manifest+json,{name:'CoachBus',short_name:'CoachBus',start_url:'.',display:'standalone',background_color:'%23ffffff',theme_color:'%233b82f6',icons:[{src:'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',sizes:'512x512',type:'image/png'}]}">
+    
+    <style>
+        /* Styles d'impression */
+        @media print {
+            .no-print, header, nav, button:not(.print-keep), .bg-gray-50, .bg-white, .shadow, .rounded-lg, .fixed {
+                display: none !important;
+            }
+            body, html {
+                background: white;
+                font-size: 12pt;
+                padding: 0.5cm;
+            }
+            .print-only { 
+                display: block !important; 
+            }
+            .print-table { 
+                display: table !important; 
+                width: 100%; 
+                border-collapse: collapse;
+            }
+            .print-table th, .print-table td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            .print-header {
+                display: flex !important;
+                justify-content: space-between;
+                margin-bottom: 20px;
+                font-size: 16pt;
+                font-weight: bold;
+            }
+        }
+        
+        .print-only { 
+            display: none; 
+        }
+        
+        /* Optimisation tactile */
+        .btn-tactile {
+            min-height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 600;
+            transition: all 0.1s ease;
+            touch-action: manipulation;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .btn-tactile:active {
+            transform: scale(0.98);
+            opacity: 0.8;
+        }
+        
+        .list-item {
+            min-height: 60px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            touch-action: manipulation;
+        }
+        
+        body {
+            background-color: #f9fafb;
+        }
+        
+        /* Animation de chargement */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+<!-- Conteneur principal -->
+<div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-xl relative">
+    
+    <!-- En-tête -->
+    <header id="main-header" class="p-4 border-b border-gray-200 flex justify-between items-center bg-white no-print">
+        <h1 class="text-xl font-bold text-blue-600">
+            <i class="fas fa-bus mr-2"></i>CoachBus
+        </h1>
+        <div id="user-info" class="text-sm text-gray-600"></div>
+        <button id="logout-btn" class="text-gray-500 hover:text-red-500 p-2" style="display: none;">
+            <i class="fas fa-sign-out-alt"></i>
+        </button>
+    </header>
+
+    <!-- Zone dynamique -->
+    <main id="content" class="p-4">
+        <div class="text-center py-10 text-gray-500">
+            <i class="fas fa-spinner loading-spinner text-3xl mb-2"></i>
+            <p>Chargement...</p>
+        </div>
+    </main>
+</div>
+
+<!-- Template d'impression -->
+<div id="print-template" class="print-only container mx-auto p-4">
+    <div class="print-header">
+        <span>📋 Rapport de Présence - CoachBus</span>
+        <span id="print-date"></span>
+    </div>
+    <div id="print-bus-info" class="mb-4 text-lg"></div>
+    <table class="print-table">
+        <thead>
+            <tr>
+                <th>Enfant</th>
+                <th>Âge</th>
+                <th>Groupe</th>
+                <th>Allergies</th>
+                <th>Statut</th>
+                <th>Commentaire</th>
+            </tr>
+        </thead>
+        <tbody id="print-tbody"></tbody>
+    </table>
+    <div class="print-footer" style="margin-top: 20px; font-size: 10pt; color: #666;">
+        Document généré le <span id="print-generation-date"></span>
+    </div>
+</div>
+
+<script>
+    // ===================== CONFIGURATION =====================
+    // ⚠️ REMPLACER PAR TES PROPRES CLÉS SUPABASE
+    const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+    
+    // Initialisation Supabase
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ===================== ÉTAT GLOBAL =====================
+    let currentUser = null;
+    let currentRole = null;
+    let currentAppelId = null;
+    let currentBus = null;
+    let enfantsList = [];
+    let appelsEnCours = new Map();
+
+    // ===================== FONCTIONS UTILITAIRES =====================
+    function showView(viewName) {
+        const content = document.getElementById('content');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userInfo = document.getElementById('user-info');
+        
+        if (currentUser) {
+            const roleBadge = {
+                'super-admin': '🔧 Super Admin',
+                'admin': '📊 Admin',
+                'coach': '🚌 Coach'
+            }[currentRole] || currentRole;
+            
+            userInfo.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <span class="font-medium">${currentUser.nom || currentUser.identifiant_simple}</span>
+                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">${roleBadge}</span>
+                </div>
+            `;
+            logoutBtn.style.display = 'block';
+        } else {
+            userInfo.innerHTML = '';
+            logoutBtn.style.display = 'none';
+        }
+
+        switch(viewName) {
+            case 'login': renderLogin(); break;
+            case 'select-bus': renderSelectBus(); break;
+            case 'appel': renderAppel(); break;
+            case 'admin-dashboard': renderAdminDashboard(); break;
+            case 'admin-enfants': renderAdminEnfants(); break;
+            case 'admin-rapports': renderAdminRapports(); break;
+            default: renderLogin();
+        }
+    }
+
+    async function logout() {
+        if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
+            currentUser = null;
+            currentRole = null;
+            currentAppelId = null;
+            currentBus = null;
+            enfantsList = [];
+            appelsEnCours.clear();
+            showView('login');
+        }
+    }
+
+    // ===================== AUTHENTIFICATION =====================
+    async function handleLogin(identifiant) {
+        if (!identifiant || identifiant.trim() === '') {
+            alert('❌ Veuillez entrer votre identifiant');
+            return;
+        }
+
+        // Afficher un loader
+        document.getElementById('content').innerHTML = `
+            <div class="text-center py-10">
+                <i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i>
+                <p>Connexion en cours...</p>
+            </div>
+        `;
+
+        // Super Admin (en dur)
+        if (identifiant.toLowerCase() === 'superadmin') {
+            currentUser = { 
+                id: 'super', 
+                identifiant_simple: 'superadmin', 
+                nom: 'Super Admin' 
+            };
+            currentRole = 'super-admin';
+            showView('admin-dashboard');
+            return;
+        }
+
+        try {
+            // Chercher dans la table Coachs
+            const { data: coach, error } = await supabase
+                .from('Coachs')
+                .select('*')
+                .eq('Identifiant_Simple', identifiant.trim())
+                .maybeSingle();
+
+            if (error) {
+                console.error('Erreur Supabase:', error);
+                alert('❌ Erreur de connexion à la base de données');
+                showView('login');
+                return;
+            }
+
+            if (!coach) {
+                alert('❌ Identifiant inconnu. Vérifiez votre saisie.');
+                showView('login');
+                return;
+            }
+
+            // Connexion réussie
+            currentUser = { 
+                id: coach.ID, 
+                identifiant_simple: coach.Identifiant_Simple, 
+                nom: coach.Nom 
+            };
+            currentRole = coach.Role || 'coach';
+
+            if (currentRole === 'admin' || currentRole === 'super-admin') {
+                showView('admin-dashboard');
+            } else {
+                showView('select-bus');
+            }
+        } catch (err) {
+            console.error('Erreur:', err);
+            alert('❌ Une erreur est survenue lors de la connexion');
+            showView('login');
+        }
+    }
+
+    // ===================== VUES =====================
+    
+    function renderLogin() {
+        const html = `
+            <div class="flex flex-col items-center justify-center min-h-[70vh]">
+                <div class="w-full max-w-sm">
+                    <div class="text-center mb-8">
+                        <div class="bg-blue-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-bus text-5xl text-blue-600"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-800">Coach du Samedi</h2>
+                        <p class="text-gray-500 mt-2">Application de gestion des présences</p>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-user mr-2"></i>Votre identifiant
+                            </label>
+                            <input 
+                                type="text" 
+                                id="identifiant-input" 
+                                placeholder="Ex: julien, marie..." 
+                                class="w-full p-4 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                autofocus
+                                autocomplete="off"
+                            >
+                        </div>
+                        
+                        <button id="login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white btn-tactile rounded-lg shadow-md">
+                            <i class="fas fa-arrow-right mr-2"></i> Accéder à l'application
+                        </button>
+                    </div>
+                    
+                    <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+                        <p class="text-xs text-gray-600 mb-2 font-medium">📝 Identifiants de test :</p>
+                        <ul class="text-xs text-gray-500 space-y-1">
+                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">superadmin</code> - Accès complet</li>
+                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">marie</code> - Admin (gestion enfants)</li>
+                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">julien</code> - Coach (appel)</li>
+                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">sophie</code> - Coach (appel)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('content').innerHTML = html;
+        
+        const input = document.getElementById('identifiant-input');
+        const button = document.getElementById('login-submit');
+        
+        button.addEventListener('click', () => handleLogin(input.value));
+        input.addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') handleLogin(input.value);
+        });
+    }
+
+    function renderSelectBus() {
+        const html = `
+            <div class="flex flex-col items-center justify-center min-h-[70vh] space-y-6">
+                <div class="text-center mb-4">
+                    <div class="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fas fa-user-check text-3xl text-green-600"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold">Bonjour ${currentUser.nom || currentUser.identifiant_simple} !</h2>
+                    <p class="text-gray-600 mt-1">Quel bus accompagnez-vous aujourd'hui ?</p>
+                </div>
+                
+                <div class="w-full space-y-4">
+                    <button id="bus1-btn" class="w-full bg-gradient-to-r from-green-500 to-green-600 text-white btn-tactile rounded-xl py-6 text-2xl shadow-lg">
+                        <i class="fas fa-bus mr-3"></i> BUS 1
+                    </button>
+                    
+                    <button id="bus2-btn" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white btn-tactile rounded-xl py-6 text-2xl shadow-lg">
+                        <i class="fas fa-bus mr-3"></i> BUS 2
+                    </button>
+                </div>
+                
+                <p class="text-sm text-gray-500 mt-8">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Sélectionnez le bus pour commencer l'appel
+                </p>
+            </div>
+        `;
+        
+        document.getElementById('content').innerHTML = html;
+        document.getElementById('bus1-btn').addEventListener('click', () => startAppel('1'));
+        document.getElementById('bus2-btn').addEventListener('click', () => startAppel('2'));
+    }
+
+    async function startAppel(busNum) {
+        // Afficher loader
+        document.getElementById('content').innerHTML = `
+            <div class="text-center py-10">
+                <i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i>
+                <p>Préparation de l'appel...</p>
+            </div>
+        `;
+        
+        currentBus = busNum;
+        
+        try {
+            // Créer l'appel
+            const { data: appel, error } = await supabase
+                .from('Appels')
+                .insert([{
+                    Date: new Date().toISOString().split('T')[0],
+                    Bus_Num: parseInt(busNum),
+                    Coach_ID: currentUser.id,
+                    Terminé: false
+                }])
+                .select()
+                .single();
+            
+            if (error) throw error;
+            currentAppelId = appel.ID;
+
+            // Charger les enfants
+            const { data: enfants, error: errEnf } = await supabase
+                .from('Enfants')
+                .select('*')
+                .order('Nom', { ascending: true });
+            
+            if (errEnf) throw errEnf;
+            enfantsList = enfants || [];
+            
+            // Initialiser les statuts
+            appelsEnCours.clear();
+            enfantsList.forEach(e => {
+                const statut = e.Absent_Precoché ? 'Absent' : null;
+                appelsEnCours.set(e.ID, { statut, commentaire: '' });
+            });
+
+            showView('appel');
+        } catch (error) {
+            console.error('Erreur:', error);
+            alert('❌ Erreur lors de la création de l\'appel');
+            showView('select-bus');
+        }
+    }
+
+    function renderAppel() {
+        let itemsHtml = '';
+        
+        enfantsList.forEach(enfant => {
+            const data = appelsEnCours.get(enfant.ID) || { statut: null, commentaire: '' };
+            const isPresent = data.statut === 'Présent';
+            const isAbsent = data.statut === 'Absent';
+            const precochéAbsent = enfant.Absent_Precoché;
+            
+            itemsHtml += `
+                <div class="list-item flex flex-col bg-white hover:bg-gray-50 transition-colors" data-enfant-id="${enfant.ID}">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <div class="font-medium text-lg">
+                                ${enfant.Prenom} ${enfant.Nom}
+                                <span class="text-sm text-gray-500 ml-2">(${enfant.Âge || '?'} ans)</span>
+                            </div>
+                            ${enfant.Allergies ? `
+                                <div class="text-xs text-red-600 mt-1">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>${enfant.Allergies}
+                                </div>
+                            ` : ''}
+                            ${precochéAbsent ? `
+                                <span class="inline-block text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded mt-1">
+                                    ⚠️ Signalé absent par les parents
+                                </span>
+                            ` : ''}
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="btn-statut present-btn px-4 py-2 rounded-lg font-bold transition-all ${
+                                isPresent 
+                                    ? 'bg-green-500 text-white shadow-md' 
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }" data-statut="Présent">
+                                <i class="fas fa-check mr-1"></i>Présent
+                            </button>
+                            <button class="btn-statut absent-btn px-4 py-2 rounded-lg font-bold transition-all ${
+                                isAbsent 
+                                    ? 'bg-red-500 text-white shadow-md' 
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }" data-statut="Absent">
+                                <i class="fas fa-times mr-1"></i>Absent
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <input 
+                            type="text" 
+                            placeholder="Commentaire (optionnel) - ex: A oublié son forfait" 
+                            class="comment-input w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            value="${data.commentaire || ''}"
+                        >
+                    </div>
+                </div>
+            `;
+        });
+
+        const presents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Présent').length;
+        const absents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Absent').length;
+        const restants = enfantsList.length - presents - absents;
+
+        const html = `
+            <div class="mb-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-bold">
+                        <i class="fas fa-clipboard-list mr-2 text-blue-600"></i>
+                        Appel Bus ${currentBus}
+                    </h2>
+                    <span class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                        ${enfantsList.length} enfants
+                    </span>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 mt-4">
+                    <div class="bg-green-100 rounded-lg p-3 text-center">
+                        <div class="text-2xl font-bold text-green-700">${presents}</div>
+                        <div class="text-xs text-green-600">Présents</div>
+                    </div>
+                    <div class="bg-red-100 rounded-lg p-3 text-center">
+                        <div class="text-2xl font-bold text-red-700">${absents}</div>
+                        <div class="text-xs text-red-600">Absents</div>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-3 text-center">
+                        <div class="text-2xl font-bold text-gray-700">${restants}</div>
+                        <div class="text-xs text-gray-600">À valider</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="space-y-2 mb-24" id="enfants-list-container">
+                ${itemsHtml}
+            </div>
+            
+            <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t border-gray-200 shadow-lg no-print">
+                <button id="valider-appel-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white btn-tactile rounded-lg py-4 text-lg shadow-md">
+                    <i class="fas fa-check-circle mr-2"></i> 
+                    Valider l'appel (${presents + absents}/${enfantsList.length})
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('content').innerHTML = html;
+
+        // Event listeners
+        document.querySelectorAll('.present-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const parent = e.target.closest('[data-enfant-id]');
+                const enfantId = parseInt(parent.dataset.enfantId);
+                updateStatut(enfantId, 'Présent');
+            });
+        });
+        
+        document.querySelectorAll('.absent-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const parent = e.target.closest('[data-enfant-id]');
+                const enfantId = parseInt(parent.dataset.enfantId);
+                updateStatut(enfantId, 'Absent');
+            });
+        });
+        
+        document.querySelectorAll('.comment-input').forEach(input => {
+            input.addEventListener('input', (e) => {
+                const parent = e.target.closest('[data-enfant-id]');
+                const enfantId = parseInt(parent.dataset.enfantId);
+                const comment = e.target.value;
+                const current = appelsEnCours.get(enfantId) || { statut: null, commentaire: '' };
+                current.commentaire = comment;
+                appelsEnCours.set(enfantId, current);
+            });
+        });
+
+        document.getElementById('valider-appel-btn').addEventListener('click', validerAppel);
+    }
+
+    function updateStatut(enfantId, statut) {
+        const current = appelsEnCours.get(enfantId) || { commentaire: '' };
+        current.statut = statut;
+        appelsEnCours.set(enfantId, current);
+        renderAppel();
+    }
+
+    async function validerAppel() {
+        let allSet = true;
+        const manquants = [];
+        
+        for (let enfant of enfantsList) {
+            const data = appelsEnCours.get(enfant.ID);
+            if (!data || !data.statut) {
+                allSet = false;
+                manquants.push(`${enfant.Prenom} ${enfant.Nom}`);
+            }
+        }
+        
+        if (!allSet) {
+            alert(`❌ ${manquants.length} enfant(s) sans statut :\n${manquants.slice(0, 3).join('\n')}${manquants.length > 3 ? '\n...' : ''}`);
+            return;
+        }
+
+        if (!confirm(`Valider l'appel avec ${Array.from(appelsEnCours.values()).filter(v => v.statut === 'Présent').length} présents et ${Array.from(appelsEnCours.values()).filter(v => v.statut === 'Absent').length} absents ?`)) {
+            return;
+        }
+
+        document.getElementById('content').innerHTML = `
+            <div class="text-center py-10">
+                <i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i>
+                <p>Enregistrement de l'appel...</p>
+            </div>
+        `;
+
+        try {
+            const lignesToInsert = [];
+            for (let enfant of enfantsList) {
+                const data = appelsEnCours.get(enfant.ID);
+                lignesToInsert.push({
+                    ID_Appel: currentAppelId,
+                    ID_Enfant: enfant.ID,
+                    Statut: data.statut,
+                    Commentaire: data.commentaire || null
+                });
+            }
+            
+            const { error: errLignes } = await supabase.from('Lignes_Appel').insert(lignesToInsert);
+            if (errLignes) throw errLignes;
+
+            const { error: errAppel } = await supabase
+                .from('Appels')
+                .update({ 
+                    Terminé: true, 
+                    Heure_Validation: new Date().toISOString() 
+                })
+                .eq('ID', currentAppelId);
+            
+            if (errAppel) throw errAppel;
+
+            alert('✅ Appel validé avec succès !');
+            currentAppelId = null;
+            showView('select-bus');
+        } catch (error) {
+            console.error('Erreur:', error);
+            alert('❌ Erreur lors de la validation de l\'appel');
+            showView('appel');
+        }
+    }
+
+    // ===================== INTERFACE ADMIN =====================
+    
+    function renderAdminDashboard() {
+        const html = `
+            <div class="space-y-6">
+                <div class="text-center mb-6">
+                    <i class="fas fa-user-shield text-4xl text-indigo-600 mb-2"></i>
+                    <h2 class="text-2xl font-bold">Tableau de bord Admin</h2>
+                    <p class="text-gray-600">Gérez les enfants et consultez les rapports</p>
+                </div>
+                
+                <div class="grid grid-cols-1 gap-4">
+                    <button id="admin-enfants-btn" class="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-xl btn-tactile flex-col shadow-lg">
+                        <i class="fas fa-users text-4xl mb-3"></i>
+                        <span class="text-xl font-bold">Gérer les Enfants</span>
+                        <span class="text-sm opacity-90 mt-1">Ajouter, modifier, supprimer</span>
+                    </button>
+                    
+                    <button id="admin-rapports-btn" class="bg-gradient-to-r from-green-500 to-green-600 text-white p-6 rounded-xl btn-tactile flex-col shadow-lg">
+                        <i class="fas fa-print text-4xl mb-3"></i>
+                        <span class="text-xl font-bold">Rapports du Jour</span>
+                        <span class="text-sm opacity-90 mt-1">Consulter et imprimer</span>
+                    </button>
+                </div>
+                
+                <div class="mt-8 p-4 bg-blue-50 rounded-lg">
+                    <h3 class="font-semibold text-blue-900 mb-2">
+                        <i class="fas fa-info-circle mr-2"></i>Statistiques rapides
+                    </h3>
+                    <div id="quick-stats" class="text-sm text-blue-800">
+                        Chargement...
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('content').innerHTML = html;
+        document.getElementById('admin-enfants-btn').addEventListener('click', () => showView('admin-enfants'));
+        document.getElementById('admin-rapports-btn').addEventListener('click', () => showView('admin-rapports'));
+        
+        // Charger les stats rapides
+        loadQuickStats();
+    }
+
+    async function loadQuickStats() {
+        try {
+            const { data: enfants } = await supabase.from('Enfants').select('*', { count: 'exact' });
+            const today = new Date().toISOString().split('T')[0];
+            const { data: appels } = await supabase.from('Appels').select('*').eq('Date', today);
+            
+            const statsHtml = `
+                <p>📊 ${enfants?.length || 0} enfants enregistrés</p>
+                <p>🚌 ${appels?.filter(a => a.Terminé).length || 0} appels terminés aujourd'hui</p>
+            `;
+            document.getElementById('quick-stats').innerHTML = statsHtml;
+        } catch (error) {
+            console.error('Erreur stats:', error);
+        }
+    }
+
+    async function renderAdminEnfants() {
+        const html = `
+            <div class="mb-4 flex justify-between items-center">
+                <h3 class="text-xl font-bold">👥 Liste des enfants</h3>
+                <button id="back-dash" class="text-blue-600 hover:text-blue-800">
+                    <i class="fas fa-arrow-left mr-1"></i>Retour
+                </button>
+            </div>
+            <div id="enfants-list-container">Chargement...</div>
+        `;
+        
+        document.getElementById('content').innerHTML = html;
+        document.getElementById('back-dash').addEventListener('click', () => showView('admin-dashboard'));
+        
+        await loadEnfantsList();
+    }
+
+    async function loadEnfantsList() {
+        try {
+            const { data: enfants, error } = await supabase
+                .from('Enfants')
+                .select('*')
+                .order('Nom', { ascending: true });
+            
+            if (error) throw error;
+            
+            let rows = '';
+            enfants.forEach(e => {
+                rows += `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="py-3 font-medium">${e.Nom} ${e.Prenom}</td>
+                        <td class="py-3 text-center">${e.Âge || '-'}</td>
+                        <td class="py-3 text-sm ${e.Allergies ? 'text-red-600' : 'text-gray-500'}">${e.Allergies || 'Aucune'}</td>
+                        <td class="py-3 text-center">
+                            <input type="checkbox" ${e.Absent_Precoché ? 'checked' : ''} data-id="${e.ID}" class="precoch-check w-5 h-5">
+                        </td>
+                        <td class="py-3 text-center">
+                            <button class="delete-enfant text-red-500 hover:text-red-700 p-2" data-id="${e.ID}" title="Supprimer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            const tableHtml = `
+                <div class="overflow-x-auto mb-6 bg-white rounded-lg shadow">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="py-3 px-4 text-left">Nom Prénom</th>
+                                <th class="py-3 px-4 text-center">Âge</th>
+                                <th class="py-3 px-4 text-left">Allergies</th>
+                                <th class="py-3 px-4 text-center">Absent précoché</th>
+                                <th class="py-3 px-4 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="5" class="text-center py-8 text-gray-500">Aucun enfant enregistré</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="border-t pt-6">
+                    <h4 class="font-semibold text-lg mb-4">➕ Ajouter un enfant</h4>
+                    <form id="add-enfant-form" class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <input type="text" id="new-nom" placeholder="Nom" class="p-3 border rounded-lg" required>
+                            <input type="text" id="new-prenom" placeholder="Prénom" class="p-3 border rounded-lg" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <input type="number" id="new-age" placeholder="Âge" class="p-3 border rounded-lg">
+                            <input type="text" id="new-groupe" placeholder="Groupe (ex: U11)" class="p-3 border rounded-lg">
+                        </div>
+                        <input type="text" id="new-allergies" placeholder="Allergies (optionnel)" class="w-full p-3 border rounded-lg">
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold">
+                            <i class="fas fa-plus mr-2"></i>Ajouter l'enfant
+                        </button>
+                    </form>
+                </div>
+            `;
+            
+            document.getElementById('enfants-list-container').innerHTML = tableHtml;
+            
+            // Event listeners
+            document.querySelectorAll('.precoch-check').forEach(cb => {
+                cb.addEventListener('change', async (e) => {
+                    const id = e.target.dataset.id;
+                    const checked = e.target.checked;
+                    try {
+                        await supabase.from('Enfants').update({ Absent_Precoché: checked }).eq('ID', id);
+                    } catch (error) {
+                        console.error('Erreur mise à jour:', error);
+                        e.target.checked = !checked;
+                        alert('Erreur lors de la mise à jour');
+                    }
+                });
+            });
+            
+            document.querySelectorAll('.delete-enfant').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    if(confirm('⚠️ Supprimer définitivement cet enfant ?')) {
+                        try {
+                            await supabase.from('Enfants').delete().eq('ID', id);
+                            await loadEnfantsList();
+                        } catch (error) {
+                            alert('Erreur lors de la suppression');
+                        }
+                    }
+                });
+            });
+            
+            document.getElementById('add-enfant-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = {
+                    Nom: document.getElementById('new-nom').value.trim(),
+                    Prenom: document.getElementById('new-prenom').value.trim(),
+                    Âge: parseInt(document.getElementById('new-age').value) || null,
+                    Groupe: document.getElementById('new-groupe').value.trim() || null,
+                    Allergies: document.getElementById('new-allergies').value.trim() || null,
+                    Absent_Precoché: false
+                };
+                
+                try {
+                    await supabase.from('Enfants').insert([formData]);
+                    document.getElementById('add-enfant-form').reset();
+                    await loadEnfantsList();
+                    alert('✅ Enfant ajouté avec succès');
+                } catch (error) {
+                    console.error('Erreur ajout:', error);
+                    alert('❌ Erreur lors de l\'ajout');
+                }
+            });
+            
+        } catch (error) {
+            console.error('Erreur chargement:', error);
+            document.getElementById('enfants-list-container').innerHTML = `
+                <p class="text-red-600">Erreur de chargement des enfants</p>
+            `;
+        }
+    }
+
+    async function renderAdminRapports() {
+        const today = new Date().toISOString().split('T')[0];
+        
+        const html = `
+            <div class="space-y-4">
+                <div class="flex items-center mb-4">
+                    <button id="back-dash2" class="text-blue-600 hover:text-blue-800 mr-4">
+                        <i class="fas fa-arrow-left mr-1"></i>Retour
+                    </button>
+                    <h3 class="text-xl font-bold">📄 Rapports du ${new Date(today).toLocaleDateString('fr-FR')}</h3>
+                </div>
+                <div id="rapports-content">Chargement...</div>
+            </div>
+        `;
+        
+        document.getElementById('content').innerHTML = html;
+        document.getElementById('back-dash2').addEventListener('click', () => showView('admin-dashboard'));
+        
+        await loadRapportsList(today);
+    }
+
+    async function loadRapportsList(today) {
+        try {
+            const { data: appels, error } = await supabase
+                .from('Appels')
+                .select(`
+                    *,
+                    Coachs(Nom)
+                `)
+                .eq('Date', today)
+                .eq('Terminé', true)
+                .order('Heure_Validation', { ascending: false });
+            
+            if (error) throw error;
+            
+            if (!appels || appels.length === 0) {
+                document.getElementById('rapports-content').innerHTML = `
+                    <div class="text-center py-10 bg-gray-50 rounded-lg">
+                        <i class="fas fa-inbox text-4xl text-gray-400 mb-3"></i>
+                        <p class="text-gray-600">Aucun appel terminé aujourd'hui</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let options = '';
+            appels.forEach(a => {
+                const heure = a.Heure_Validation ? new Date(a.Heure_Validation).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}) : '';
+                options += `<option value="${a.ID}">🚌 Bus ${a.Bus_Num} - ${heure} - Coach: ${a.Coachs?.Nom || 'Inconnu'}</option>`;
+            });
+            
+            const selectHtml = `
+                <div class="bg-white rounded-lg shadow p-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        <i class="fas fa-list mr-2"></i>Sélectionnez un appel à imprimer
+                    </label>
+                    <select id="appel-select" class="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500">
+                        ${options}
+                    </select>
+                    
+                    <button id="preview-print" class="w-full bg-green-600 hover:bg-green-700 text-white btn-tactile rounded-lg shadow-md">
+                        <i class="fas fa-print mr-2"></i> Préparer l'impression
+                    </button>
+                    
+                    <p class="text-sm text-gray-500 mt-4 text-center">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Utilisez Ctrl+P (ou Cmd+P) puis "Enregistrer en PDF" ou imprimez
+                    </p>
+                </div>
+            `;
+            
+            document.getElementById('rapports-content').innerHTML = selectHtml;
+            document.getElementById('preview-print').addEventListener('click', async () => {
+                const appelId = document.getElementById('appel-select').value;
+                await preparePrintView(appelId);
+            });
+            
+        } catch (error) {
+            console.error('Erreur:', error);
+            document.getElementById('rapports-content').innerHTML = `
+                <p class="text-red-600">Erreur de chargement des rapports</p>
+            `;
+        }
+    }
+
+    async function preparePrintView(appelId) {
+        try {
+            const { data: appel, error: errAppel } = await supabase
+                .from('Appels')
+                .select('*, Coachs(Nom)')
+                .eq('ID', appelId)
+                .single();
+            
+            if (errAppel) throw errAppel;
+            
+            const { data: lignes, error: errLignes } = await supabase
+                .from('Lignes_Appel')
+                .select(`
+                    *,
+                    Enfants(Nom, Prenom, Âge, Groupe, Allergies)
+                `)
+                .eq('ID_Appel', appelId)
+                .order('Statut', { ascending: true });
+            
+            if (errLignes) throw errLignes;
+            
+            const dateStr = new Date(appel.Date).toLocaleDateString('fr-FR', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+            
+            const heureStr = appel.Heure_Validation 
+                ? new Date(appel.Heure_Validation).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
+                : '';
+            
+            document.getElementById('print-date').innerText = dateStr;
+            document.getElementById('print-bus-info').innerHTML = `
+                🚌 Bus ${appel.Bus_Num} | Coach: ${appel.Coachs?.Nom || 'Inconnu'} | Validé à ${heureStr}
+            `;
+            document.getElementById('print-generation-date').innerText = new Date().toLocaleString('fr-FR');
+            
+            const tbody = document.getElementById('print-tbody');
+            tbody.innerHTML = '';
+            
+            const presents = lignes.filter(l => l.Statut === 'Présent').length;
+            const absents = lignes.filter(l => l.Statut === 'Absent').length;
+            
+            // Ajouter une ligne de résumé
+            const resumeRow = document.createElement('tr');
+            resumeRow.style.backgroundColor = '#f3f4f6';
+            resumeRow.style.fontWeight = 'bold';
+            resumeRow.innerHTML = `
+                <td colspan="6" style="padding: 10px;">
+                    📊 Résumé : ${presents} présents, ${absents} absents, Total: ${lignes.length} enfants
+                </td>
+            `;
+            tbody.appendChild(resumeRow);
+            
+            lignes.forEach(l => {
+                const row = document.createElement('tr');
+                const statutColor = l.Statut === 'Présent' ? '#10b981' : '#ef4444';
+                const statutBg = l.Statut === 'Présent' ? '#d1fae5' : '#fee2e2';
+                
+                row.innerHTML = `
+                    <td style="padding: 8px;">${l.Enfants?.Prenom || ''} ${l.Enfants?.Nom || ''}</td>
+                    <td style="padding: 8px; text-align: center;">${l.Enfants?.Âge || '-'}</td>
+                    <td style="padding: 8px;">${l.Enfants?.Groupe || '-'}</td>
+                    <td style="padding: 8px; color: ${l.Enfants?.Allergies ? '#dc2626' : '#6b7280'};">
+                        ${l.Enfants?.Allergies || 'Aucune'}
+                    </td>
+                    <td style="padding: 8px; background-color: ${statutBg}; color: ${statutColor}; font-weight: bold; text-align: center;">
+                        ${l.Statut}
+                    </td>
+                    <td style="padding: 8px; color: #6b7280;">${l.Commentaire || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            setTimeout(() => {
+                window.print();
+            }, 100);
+            
+        } catch (error) {
+            console.error('Erreur préparation impression:', error);
+            alert('❌ Erreur lors de la préparation de l\'impression');
+        }
+    }
+
+    // ===================== INITIALISATION =====================
+    document.addEventListener('DOMContentLoaded', () => {
+        // Vérifier la connexion Supabase
+        console.log('🚀 CoachBus - Initialisation...');
+        console.log('📡 Supabase URL:', SUPABASE_URL);
+        
+        showView('login');
+        
+        document.getElementById('logout-btn').addEventListener('click', logout);
+    });
+
+    // Gestion des erreurs globales
+    window.addEventListener('error', (e) => {
+        console.error('Erreur globale:', e.error);
+    });
+
+</script>
+</body>
+</html>
