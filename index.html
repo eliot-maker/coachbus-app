@@ -8,32 +8,24 @@
     <meta name="theme-color" content="#3b82f6">
     <title>CoachBus - Présences</title>
     
-    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- PWA Manifest -->
     <link rel="manifest" href="data:application/manifest+json,{name:'CoachBus',short_name:'CoachBus',start_url:'.',display:'standalone',background_color:'%23ffffff',theme_color:'%233b82f6',icons:[{src:'https://cdn-icons-png.flaticon.com/512/3097/3097180.png',sizes:'512x512',type:'image/png'}]}">
     
     <style>
         @media print {
             .no-print, header, nav, button:not(.print-keep), .bg-gray-50, .bg-white, .shadow, .rounded-lg, .fixed { display: none !important; }
-            body, html { background: white; font-size: 12pt; padding: 0.5cm; }
+            body, html { background: white; padding: 0.5cm; }
             .print-only { display: block !important; }
             .print-table { display: table !important; width: 100%; border-collapse: collapse; }
             .print-table th, .print-table td { border: 1px solid #ddd; padding: 8px; }
             .print-header { display: flex !important; justify-content: space-between; margin-bottom: 20px; font-size: 16pt; font-weight: bold; }
         }
         .print-only { display: none; }
-        .btn-tactile { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 600; transition: 0.1s; touch-action: manipulation; cursor: pointer; }
-        .btn-tactile:active { transform: scale(0.98); opacity: 0.8; }
-        .list-item { min-height: 60px; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; touch-action: manipulation; }
+        .btn-tactile { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 600; touch-action: manipulation; cursor: pointer; }
+        .list-item { min-height: 60px; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
         body { background-color: #f9fafb; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-spinner { animation: spin 1s linear infinite; }
-        .error-box { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; padding: 16px; border-radius: 8px; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased">
@@ -45,14 +37,11 @@
         <button id="logout-btn" class="text-gray-500 hover:text-red-500 p-2" style="display: none;"><i class="fas fa-sign-out-alt"></i></button>
     </header>
     <main id="content" class="p-4">
-        <div class="text-center py-10 text-gray-500">
-            <i class="fas fa-spinner loading-spinner text-3xl mb-2"></i>
-            <p>Initialisation de l'application...</p>
-        </div>
+        <!-- Remplacé immédiatement par le script -->
     </main>
 </div>
 
-<!-- Template d'impression -->
+<!-- Template d'impression (invisible à l'écran) -->
 <div id="print-template" class="print-only container mx-auto p-4">
     <div class="print-header"><span>📋 Rapport de Présence - CoachBus</span><span id="print-date"></span></div>
     <div id="print-bus-info" class="mb-4 text-lg"></div>
@@ -61,37 +50,14 @@
 </div>
 
 <script>
-    // ===================== CONFIGURATION SUPABASE (AVEC TES CLÉS) =====================
+    // ===================== CONFIGURATION (À JOUR) =====================
     const SUPABASE_URL = 'https://otuymkznwiidookrqfhd.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_iF0rYqW3cGiYK9kdELy1HA_DALrOIRF';
     
-    // Fonction de log pour déboguer
-    function log(message, isError = false) {
-        const style = isError ? 'color: #ef4444; font-weight: bold;' : 'color: #3b82f6;';
-        console.log(`%c[CoachBus] ${message}`, style);
-    }
+    // Initialisation simple, sans test bloquant
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     
-    log('Démarrage avec URL: ' + SUPABASE_URL);
-    
-    // Initialisation Supabase avec gestion d'erreur explicite
-    let supabase;
-    try {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        log('✅ Client Supabase initialisé');
-    } catch (e) {
-        log('❌ Erreur création client Supabase: ' + e.message, true);
-        document.getElementById('content').innerHTML = `
-            <div class="error-box">
-                <i class="fas fa-exclamation-triangle text-2xl mr-2"></i>
-                <h3 class="font-bold text-lg">Erreur de configuration Supabase</h3>
-                <p class="mt-2">${e.message}</p>
-                <p class="mt-4 text-sm">Vérifie que les clés sont correctes et que tu es bien connecté à Internet.</p>
-            </div>
-        `;
-        throw e;
-    }
-
-    // ===================== ÉTAT GLOBAL =====================
+    // État global
     let currentUser = null;
     let currentRole = null;
     let currentAppelId = null;
@@ -134,43 +100,29 @@
         }
     }
 
-    async function logout() {
-        if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
-            currentUser = null;
-            currentRole = null;
-            currentAppelId = null;
-            currentBus = null;
-            enfantsList = [];
-            appelsEnCours.clear();
+    function logout() {
+        if (confirm('Déconnexion ?')) {
+            currentUser = null; currentRole = null; currentAppelId = null; currentBus = null;
+            enfantsList = []; appelsEnCours.clear();
             showView('login');
         }
     }
 
-    // ===================== AUTHENTIFICATION =====================
+    // ===================== AUTHENTIFICATION (avec gestion erreurs tables) =====================
     async function handleLogin(identifiant) {
-        if (!identifiant || identifiant.trim() === '') {
-            alert('❌ Veuillez entrer votre identifiant');
-            return;
-        }
+        if (!identifiant.trim()) return alert('Entrez votre identifiant');
+        
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-600 mb-2"></i><p>Connexion...</p></div>`;
 
-        document.getElementById('content').innerHTML = `
-            <div class="text-center py-10">
-                <i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i>
-                <p>Connexion en cours...</p>
-            </div>
-        `;
-
-        // Super Admin (hardcodé)
+        // Super admin (hardcodé)
         if (identifiant.toLowerCase() === 'superadmin') {
             currentUser = { id: 'super', identifiant_simple: 'superadmin', nom: 'Super Admin' };
             currentRole = 'super-admin';
-            log('✅ Connexion superadmin réussie');
             showView('admin-dashboard');
             return;
         }
 
         try {
-            log('Recherche du coach: ' + identifiant);
             const { data: coach, error } = await supabase
                 .from('Coachs')
                 .select('*')
@@ -178,43 +130,111 @@
                 .maybeSingle();
 
             if (error) {
-                log('❌ Erreur Supabase (Coachs): ' + error.message + ' (code: ' + error.code + ')', true);
+                console.error('Erreur Supabase:', error);
                 if (error.code === '42P01') {
-                    alert('❌ La table "Coachs" n\'existe pas dans la base de données.\n\n👉 Exécute le script SQL fourni dans Supabase > SQL Editor.');
+                    // Table manquante : afficher le script SQL
+                    document.getElementById('content').innerHTML = `
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+                            <h3 class="text-lg font-bold text-red-800 mb-2"><i class="fas fa-database mr-2"></i>Tables manquantes</h3>
+                            <p class="mb-4">Les tables nécessaires n'existent pas dans ta base Supabase. Copie le script ci-dessous et exécute-le dans <strong>Supabase > SQL Editor</strong> :</p>
+                            <textarea readonly class="w-full h-48 p-2 bg-gray-100 text-xs font-mono border rounded" onclick="this.select()">${getCreateTablesSQL()}</textarea>
+                            <button onclick="location.reload()" class="mt-4 w-full bg-blue-600 text-white py-3 rounded-lg">Recharger après exécution</button>
+                        </div>
+                    `;
+                    return;
                 } else if (error.code === '42501') {
-                    alert('❌ Accès refusé (politique RLS).\n\n👉 Exécute le script SQL pour autoriser l\'accès aux tables.');
+                    alert('Accès refusé. Vérifie les politiques RLS dans Supabase.');
                 } else {
-                    alert('❌ Erreur de connexion à la base de données : ' + error.message);
+                    alert('Erreur base de données : ' + error.message);
                 }
                 showView('login');
                 return;
             }
 
             if (!coach) {
-                alert('❌ Identifiant inconnu. Vérifiez votre saisie.');
+                alert('Identifiant inconnu');
                 showView('login');
                 return;
             }
 
             currentUser = { id: coach.ID, identifiant_simple: coach.Identifiant_Simple, nom: coach.Nom };
             currentRole = coach.Role || 'coach';
-            log('✅ Connecté en tant que ' + currentRole + ': ' + coach.Nom);
             
             if (currentRole === 'admin' || currentRole === 'super-admin') {
                 showView('admin-dashboard');
             } else {
                 showView('select-bus');
             }
-        } catch (err) {
-            log('❌ Exception login: ' + err.message, true);
-            alert('❌ Une erreur est survenue lors de la connexion.');
+        } catch (e) {
+            alert('Erreur inattendue : ' + e.message);
             showView('login');
         }
     }
 
-    // ===================== RENDU DES VUES (inchangé mais fonctionnel) =====================
+    // Script SQL complet (utilisé si tables manquantes)
+    function getCreateTablesSQL() {
+        return `-- Copie ce script dans Supabase > SQL Editor et exécute-le
+CREATE TABLE IF NOT EXISTS Coachs (
+    ID SERIAL PRIMARY KEY,
+    Identifiant_Simple TEXT UNIQUE NOT NULL,
+    Nom TEXT,
+    Role TEXT DEFAULT 'coach'
+);
+
+CREATE TABLE IF NOT EXISTS Enfants (
+    ID SERIAL PRIMARY KEY,
+    Nom TEXT NOT NULL,
+    Prenom TEXT NOT NULL,
+    Âge INTEGER,
+    Allergies TEXT,
+    Groupe TEXT,
+    Absent_Precoché BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS Appels (
+    ID SERIAL PRIMARY KEY,
+    Date DATE NOT NULL,
+    Bus_Num INTEGER NOT NULL,
+    Coach_ID INTEGER REFERENCES Coachs(ID),
+    Terminé BOOLEAN DEFAULT FALSE,
+    Heure_Validation TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS Lignes_Appel (
+    ID SERIAL PRIMARY KEY,
+    ID_Appel INTEGER REFERENCES Appels(ID) ON DELETE CASCADE,
+    ID_Enfant INTEGER REFERENCES Enfants(ID),
+    Statut TEXT CHECK (Statut IN ('Présent', 'Absent')),
+    Commentaire TEXT
+);
+
+-- Activer RLS et autoriser tout (pour test)
+ALTER TABLE Coachs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE Enfants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE Appels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE Lignes_Appel ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "all_coachs" ON Coachs FOR ALL USING (true);
+CREATE POLICY "all_enfants" ON Enfants FOR ALL USING (true);
+CREATE POLICY "all_appels" ON Appels FOR ALL USING (true);
+CREATE POLICY "all_lignes" ON Lignes_Appel FOR ALL USING (true);
+
+-- Données de test
+INSERT INTO Coachs (Identifiant_Simple, Nom, Role) VALUES 
+('julien', 'Julien Coach', 'coach'),
+('marie', 'Marie Admin', 'admin'),
+('sophie', 'Sophie Coach', 'coach')
+ON CONFLICT (Identifiant_Simple) DO NOTHING;
+
+INSERT INTO Enfants (Nom, Prenom, Âge, Allergies, Groupe) VALUES 
+('Dupont', 'Lucas', 8, 'Arachides', 'U9'),
+('Martin', 'Emma', 9, NULL, 'U11')
+ON CONFLICT DO NOTHING;`;
+    }
+
+    // ===================== VUES =====================
     function renderLogin() {
-        const html = `
+        document.getElementById('content').innerHTML = `
             <div class="flex flex-col items-center justify-center min-h-[70vh]">
                 <div class="w-full max-w-sm">
                     <div class="text-center mb-8">
@@ -225,94 +245,262 @@
                         <p class="text-gray-500 mt-2">Application de gestion des présences</p>
                     </div>
                     <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-user mr-2"></i>Votre identifiant</label>
-                            <input type="text" id="identifiant-input" placeholder="Ex: julien, marie..." class="w-full p-4 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500" autofocus autocomplete="off">
-                        </div>
-                        <button id="login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white btn-tactile rounded-lg shadow-md"><i class="fas fa-arrow-right mr-2"></i> Accéder</button>
+                        <input type="text" id="identifiant-input" placeholder="Votre identifiant" class="w-full p-4 border rounded-lg text-lg" autofocus autocomplete="off">
+                        <button id="login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white btn-tactile rounded-lg shadow-md">
+                            <i class="fas fa-arrow-right mr-2"></i> Accéder
+                        </button>
                     </div>
                     <div class="mt-8 p-4 bg-gray-50 rounded-lg">
-                        <p class="text-xs text-gray-600 mb-2 font-medium">📝 Identifiants de test :</p>
-                        <ul class="text-xs text-gray-500 space-y-1">
-                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">superadmin</code> - Accès complet</li>
-                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">marie</code> - Admin</li>
-                            <li>• <code class="bg-gray-200 px-2 py-0.5 rounded">julien</code> - Coach</li>
+                        <p class="text-xs text-gray-600 mb-2 font-medium">📝 Identifiants :</p>
+                        <ul class="text-xs text-gray-500">
+                            <li>• superadmin (accès complet)</li>
+                            <li>• marie (admin)</li>
+                            <li>• julien (coach)</li>
                         </ul>
                     </div>
                 </div>
             </div>
         `;
-        document.getElementById('content').innerHTML = html;
         const input = document.getElementById('identifiant-input');
-        const button = document.getElementById('login-submit');
-        button.addEventListener('click', () => handleLogin(input.value));
-        input.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleLogin(input.value); });
+        const btn = document.getElementById('login-submit');
+        btn.addEventListener('click', () => handleLogin(input.value));
+        input.addEventListener('keypress', e => { if(e.key === 'Enter') handleLogin(input.value); });
     }
 
     function renderSelectBus() {
-        const html = `
+        document.getElementById('content').innerHTML = `
             <div class="flex flex-col items-center justify-center min-h-[70vh] space-y-6">
-                <div class="text-center mb-4">
-                    <div class="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fas fa-user-check text-3xl text-green-600"></i></div>
-                    <h2 class="text-2xl font-bold">Bonjour ${currentUser.nom || currentUser.identifiant_simple} !</h2>
-                    <p class="text-gray-600 mt-1">Quel bus accompagnez-vous aujourd'hui ?</p>
-                </div>
-                <div class="w-full space-y-4">
-                    <button id="bus1-btn" class="w-full bg-gradient-to-r from-green-500 to-green-600 text-white btn-tactile rounded-xl py-6 text-2xl shadow-lg"><i class="fas fa-bus mr-3"></i> BUS 1</button>
-                    <button id="bus2-btn" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white btn-tactile rounded-xl py-6 text-2xl shadow-lg"><i class="fas fa-bus mr-3"></i> BUS 2</button>
-                </div>
-                <p class="text-sm text-gray-500 mt-8"><i class="fas fa-info-circle mr-1"></i>Sélectionnez le bus pour commencer l'appel</p>
+                <h2 class="text-2xl font-bold">Bonjour ${currentUser.nom || currentUser.identifiant_simple} !</h2>
+                <p class="text-gray-600">Choisissez le bus :</p>
+                <button id="bus1-btn" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6 text-2xl"><i class="fas fa-bus mr-3"></i>BUS 1</button>
+                <button id="bus2-btn" class="w-full bg-blue-500 text-white btn-tactile rounded-xl py-6 text-2xl"><i class="fas fa-bus mr-3"></i>BUS 2</button>
             </div>
         `;
-        document.getElementById('content').innerHTML = html;
         document.getElementById('bus1-btn').addEventListener('click', () => startAppel('1'));
         document.getElementById('bus2-btn').addEventListener('click', () => startAppel('2'));
     }
 
-    // (Le reste des fonctions : startAppel, renderAppel, updateStatut, validerAppel, 
-    //  renderAdminDashboard, loadEnfantsList, renderAdminRapports, preparePrintView...
-    //  est identique à la version précédente que tu avais, donc je ne les répète pas ici par souci de place.
-    //  Elles sont fonctionnelles et n'ont pas changé.)
+    async function startAppel(busNum) {
+        currentBus = busNum;
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin text-3xl"></i><p>Préparation...</p></div>`;
+        try {
+            const { data: appel, error } = await supabase.from('Appels').insert([{
+                Date: new Date().toISOString().split('T')[0],
+                Bus_Num: parseInt(busNum),
+                Coach_ID: currentUser.id,
+                Terminé: false
+            }]).select().single();
+            if (error) throw error;
+            currentAppelId = appel.ID;
 
-    // Pour que cette réponse reste complète, je vais inclure les fonctions manquantes compressées.
+            const { data: enfants, error: errEnf } = await supabase.from('Enfants').select('*').order('Nom');
+            if (errEnf) throw errEnf;
+            enfantsList = enfants || [];
+            appelsEnCours.clear();
+            enfantsList.forEach(e => {
+                appelsEnCours.set(e.ID, { statut: e.Absent_Precoché ? 'Absent' : null, commentaire: '' });
+            });
+            showView('appel');
+        } catch (error) {
+            console.error(error);
+            alert('Erreur création appel : ' + error.message);
+            showView('select-bus');
+        }
+    }
 
-    async function startAppel(busNum){currentBus=busNum;document.getElementById('content').innerHTML='<div class="text-center py-10"><i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i><p>Préparation de l\'appel...</p></div>';try{const{data:appel,error}=await supabase.from('Appels').insert([{Date:new Date().toISOString().split('T')[0],Bus_Num:parseInt(busNum),Coach_ID:currentUser.id,Terminé:false}]).select().single();if(error)throw error;currentAppelId=appel.ID;const{data:enfants,error:errEnf}=await supabase.from('Enfants').select('*').order('Nom',{ascending:true});if(errEnf)throw errEnf;enfantsList=enfants||[];appelsEnCours.clear();enfantsList.forEach(e=>{const statut=e.Absent_Precoché?'Absent':null;appelsEnCours.set(e.ID,{statut,commentaire:''});});showView('appel');}catch(error){console.error(error);alert('❌ Erreur lors de la création de l\'appel');showView('select-bus');}}
-    function renderAppel(){let itemsHtml='';enfantsList.forEach(enfant=>{const data=appelsEnCours.get(enfant.ID)||{statut:null,commentaire:''};const isPresent=data.statut==='Présent';const isAbsent=data.statut==='Absent';const precochéAbsent=enfant.Absent_Precoché;itemsHtml+=`<div class="list-item flex flex-col bg-white hover:bg-gray-50" data-enfant-id="${enfant.ID}"><div class="flex items-center justify-between"><div class="flex-1"><div class="font-medium text-lg">${enfant.Prenom} ${enfant.Nom} <span class="text-sm text-gray-500 ml-2">(${enfant.Âge||'?'} ans)</span></div>${enfant.Allergies?`<div class="text-xs text-red-600 mt-1"><i class="fas fa-exclamation-triangle mr-1"></i>${enfant.Allergies}</div>`:''}${precochéAbsent?'<span class="inline-block text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded mt-1">⚠️ Signalé absent</span>':''}</div><div class="flex space-x-2"><button class="btn-statut present-btn px-4 py-2 rounded-lg font-bold '+(isPresent?'bg-green-500 text-white':'bg-gray-200 text-gray-700 hover:bg-gray-300')+'"><i class="fas fa-check mr-1"></i>Présent</button><button class="btn-statut absent-btn px-4 py-2 rounded-lg font-bold '+(isAbsent?'bg-red-500 text-white':'bg-gray-200 text-gray-700 hover:bg-gray-300')+'"><i class="fas fa-times mr-1"></i>Absent</button></div></div><div class="mt-3"><input type="text" placeholder="Commentaire" class="comment-input w-full p-2 border rounded-lg text-sm" value="'+(data.commentaire||'')+'"></div></div>`;});const presents=Array.from(appelsEnCours.values()).filter(v=>v.statut==='Présent').length;const absents=Array.from(appelsEnCours.values()).filter(v=>v.statut==='Absent').length;const restants=enfantsList.length-presents-absents;const html=`<div class="mb-4"><div class="flex items-center justify-between"><h2 class="text-xl font-bold"><i class="fas fa-clipboard-list mr-2 text-blue-600"></i>Appel Bus ${currentBus}</h2><span class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">${enfantsList.length} enfants</span></div><div class="grid grid-cols-3 gap-2 mt-4"><div class="bg-green-100 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-green-700">${presents}</div><div class="text-xs text-green-600">Présents</div></div><div class="bg-red-100 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-red-700">${absents}</div><div class="text-xs text-red-600">Absents</div></div><div class="bg-gray-100 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-gray-700">${restants}</div><div class="text-xs text-gray-600">À valider</div></div></div></div><div class="space-y-2 mb-24">${itemsHtml}</div><div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t border-gray-200 shadow-lg no-print"><button id="valider-appel-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white btn-tactile rounded-lg py-4 text-lg shadow-md"><i class="fas fa-check-circle mr-2"></i>Valider l'appel (${presents+absents}/${enfantsList.length})</button></div>`;document.getElementById('content').innerHTML=html;document.querySelectorAll('.present-btn').forEach(btn=>btn.addEventListener('click',e=>{const id=parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);updateStatut(id,'Présent');}));document.querySelectorAll('.absent-btn').forEach(btn=>btn.addEventListener('click',e=>{const id=parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);updateStatut(id,'Absent');}));document.querySelectorAll('.comment-input').forEach(i=>i.addEventListener('input',e=>{const id=parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);const cur=appelsEnCours.get(id)||{statut:null,commentaire:''};cur.commentaire=e.target.value;appelsEnCours.set(id,cur);}));document.getElementById('valider-appel-btn').addEventListener('click',validerAppel);}
-    function updateStatut(id,statut){const cur=appelsEnCours.get(id)||{commentaire:''};cur.statut=statut;appelsEnCours.set(id,cur);renderAppel();}
-    async function validerAppel(){let allSet=true;const manquants=[];for(let e of enfantsList){const d=appelsEnCours.get(e.ID);if(!d||!d.statut){allSet=false;manquants.push(e.Prenom+' '+e.Nom);}}if(!allSet){alert(`❌ ${manquants.length} enfant(s) sans statut`);return;}if(!confirm(`Valider avec ${Array.from(appelsEnCours.values()).filter(v=>v.statut==='Présent').length} présents et ${Array.from(appelsEnCours.values()).filter(v=>v.statut==='Absent').length} absents ?`))return;document.getElementById('content').innerHTML='<div class="text-center py-10"><i class="fas fa-spinner loading-spinner text-3xl text-blue-600 mb-2"></i><p>Enregistrement...</p></div>';try{const lignes=[];for(let e of enfantsList){const d=appelsEnCours.get(e.ID);lignes.push({ID_Appel:currentAppelId,ID_Enfant:e.ID,Statut:d.statut,Commentaire:d.commentaire||null});}await supabase.from('Lignes_Appel').insert(lignes);await supabase.from('Appels').update({Terminé:true,Heure_Validation:new Date().toISOString()}).eq('ID',currentAppelId);alert('✅ Appel validé !');currentAppelId=null;showView('select-bus');}catch(e){alert('❌ Erreur validation');showView('appel');}}
-    function renderAdminDashboard(){document.getElementById('content').innerHTML=`<div class="space-y-6"><div class="text-center mb-6"><i class="fas fa-user-shield text-4xl text-indigo-600 mb-2"></i><h2 class="text-2xl font-bold">Tableau de bord Admin</h2><p class="text-gray-600">Gérez les enfants et consultez les rapports</p></div><div class="grid grid-cols-1 gap-4"><button id="admin-enfants-btn" class="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-6 rounded-xl btn-tactile"><i class="fas fa-users text-4xl mb-3"></i><span class="text-xl font-bold">Gérer les Enfants</span></button><button id="admin-rapports-btn" class="bg-gradient-to-r from-green-500 to-green-600 text-white p-6 rounded-xl btn-tactile"><i class="fas fa-print text-4xl mb-3"></i><span class="text-xl font-bold">Rapports du Jour</span></button></div></div>`;document.getElementById('admin-enfants-btn').addEventListener('click',()=>showView('admin-enfants'));document.getElementById('admin-rapports-btn').addEventListener('click',()=>showView('admin-rapports'));}
-    async function renderAdminEnfants(){document.getElementById('content').innerHTML=`<div class="mb-4 flex justify-between"><h3 class="text-xl font-bold">👥 Liste des enfants</h3><button id="back-dash" class="text-blue-600"><i class="fas fa-arrow-left mr-1"></i>Retour</button></div><div id="enfants-list-container">Chargement...</div>`;document.getElementById('back-dash').addEventListener('click',()=>showView('admin-dashboard'));await loadEnfantsList();}
-    async function loadEnfantsList(){try{const{data:enfants,error}=await supabase.from('Enfants').select('*').order('Nom');if(error)throw error;let rows='';enfants.forEach(e=>{rows+=`<tr><td>${e.Nom} ${e.Prenom}</td><td>${e.Âge||'-'}</td><td>${e.Allergies||'Aucune'}</td><td><input type="checkbox" ${e.Absent_Precoché?'checked':''} data-id="${e.ID}" class="precoch-check"></td><td><button class="delete-enfant text-red-500" data-id="${e.ID}"><i class="fas fa-trash"></i></button></td></tr>`;});document.getElementById('enfants-list-container').innerHTML=`<div class="overflow-x-auto"><table class="w-full"><thead><tr><th>Nom</th><th>Âge</th><th>Allergies</th><th>Absent précoché</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5">Aucun enfant</td></tr>'}</tbody></table></div><div class="border-t pt-6"><h4>➕ Ajouter un enfant</h4><form id="add-enfant-form" class="space-y-3"><div class="grid grid-cols-2 gap-3"><input type="text" id="new-nom" placeholder="Nom" required><input type="text" id="new-prenom" placeholder="Prénom" required></div><div class="grid grid-cols-2 gap-3"><input type="number" id="new-age" placeholder="Âge"><input type="text" id="new-groupe" placeholder="Groupe"></div><input type="text" id="new-allergies" placeholder="Allergies"><button type="submit" class="w-full bg-blue-600 text-white p-3 rounded">Ajouter</button></form></div>`;document.querySelectorAll('.precoch-check').forEach(cb=>cb.addEventListener('change',async e=>{const id=e.target.dataset.id;await supabase.from('Enfants').update({Absent_Precoché:e.target.checked}).eq('ID',id);}));document.querySelectorAll('.delete-enfant').forEach(b=>b.addEventListener('click',async e=>{if(confirm('Supprimer ?')){await supabase.from('Enfants').delete().eq('ID',e.currentTarget.dataset.id);loadEnfantsList();}}));document.getElementById('add-enfant-form').addEventListener('submit',async e=>{e.preventDefault();const data={Nom:document.getElementById('new-nom').value,Prenom:document.getElementById('new-prenom').value,Âge:parseInt(document.getElementById('new-age').value)||null,Groupe:document.getElementById('new-groupe').value,Allergies:document.getElementById('new-allergies').value,Absent_Precoché:false};await supabase.from('Enfants').insert([data]);loadEnfantsList();});}catch(e){console.error(e);}}
-    async function renderAdminRapports(){const today=new Date().toISOString().split('T')[0];document.getElementById('content').innerHTML=`<div><button id="back-dash2" class="text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button><h3>Rapports du ${today}</h3><div id="rapports-content">Chargement...</div></div>`;document.getElementById('back-dash2').addEventListener('click',()=>showView('admin-dashboard'));const{data:appels}=await supabase.from('Appels').select('*,Coachs(Nom)').eq('Date',today).eq('Terminé',true);let options='';appels?.forEach(a=>{options+=`<option value="${a.ID}">Bus ${a.Bus_Num} - Coach ${a.Coachs?.Nom||'?'}</option>`;});document.getElementById('rapports-content').innerHTML=appels?.length?`<select id="appel-select" class="w-full p-3 border">${options}</select><button id="preview-print" class="w-full bg-green-600 text-white btn-tactile mt-4"><i class="fas fa-print"></i> Imprimer</button>`:'<p>Aucun appel terminé aujourd\'hui.</p>';if(appels?.length)document.getElementById('preview-print').addEventListener('click',async()=>{const id=document.getElementById('appel-select').value;await preparePrintView(id);});}
-    async function preparePrintView(appelId){const{data:appel}=await supabase.from('Appels').select('*,Coachs(Nom)').eq('ID',appelId).single();const{data:lignes}=await supabase.from('Lignes_Appel').select('*,Enfants(*)').eq('ID_Appel',appelId);document.getElementById('print-date').innerText=new Date(appel.Date).toLocaleDateString('fr-FR');document.getElementById('print-bus-info').innerHTML=`Bus ${appel.Bus_Num} - Coach: ${appel.Coachs?.Nom||'?'}`;const tbody=document.getElementById('print-tbody');tbody.innerHTML='';lignes.forEach(l=>{const row=document.createElement('tr');row.innerHTML=`<td>${l.Enfants?.Prenom} ${l.Enfants?.Nom}</td><td>${l.Enfants?.Âge||'-'}</td><td>${l.Enfants?.Groupe||'-'}</td><td>${l.Enfants?.Allergies||''}</td><td>${l.Statut}</td><td>${l.Commentaire||''}</td>`;tbody.appendChild(row);});setTimeout(()=>window.print(),100);}
+    function renderAppel() {
+        let items = '';
+        enfantsList.forEach(enfant => {
+            const data = appelsEnCours.get(enfant.ID) || { statut: null, commentaire: '' };
+            const present = data.statut === 'Présent';
+            const absent = data.statut === 'Absent';
+            items += `
+                <div class="list-item" data-enfant-id="${enfant.ID}">
+                    <div class="flex justify-between">
+                        <div>
+                            <div class="font-medium">${enfant.Prenom} ${enfant.Nom} <span class="text-sm text-gray-500">(${enfant.Âge || '?'} ans)</span></div>
+                            ${enfant.Allergies ? `<div class="text-xs text-red-600"><i class="fas fa-exclamation-triangle"></i> ${enfant.Allergies}</div>` : ''}
+                            ${enfant.Absent_Precoché ? '<span class="text-xs bg-yellow-100 px-2 py-1 rounded">⚠️ Signalé absent</span>' : ''}
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="present-btn px-4 py-2 rounded-lg font-bold ${present ? 'bg-green-500 text-white' : 'bg-gray-200'}"><i class="fas fa-check"></i> Présent</button>
+                            <button class="absent-btn px-4 py-2 rounded-lg font-bold ${absent ? 'bg-red-500 text-white' : 'bg-gray-200'}"><i class="fas fa-times"></i> Absent</button>
+                        </div>
+                    </div>
+                    <input type="text" placeholder="Commentaire" class="comment-input w-full mt-2 p-2 border rounded" value="${data.commentaire || ''}">
+                </div>
+            `;
+        });
+        const presents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Présent').length;
+        const absents = Array.from(appelsEnCours.values()).filter(v => v.statut === 'Absent').length;
+        const html = `
+            <div class="mb-4">
+                <h2 class="text-xl font-bold">Appel Bus ${currentBus}</h2>
+                <div class="grid grid-cols-3 gap-2 mt-2">
+                    <div class="bg-green-100 p-2 rounded text-center"><span class="font-bold">${presents}</span> Présents</div>
+                    <div class="bg-red-100 p-2 rounded text-center"><span class="font-bold">${absents}</span> Absents</div>
+                    <div class="bg-gray-100 p-2 rounded text-center"><span class="font-bold">${enfantsList.length - presents - absents}</span> Restants</div>
+                </div>
+            </div>
+            <div class="space-y-2 mb-24">${items}</div>
+            <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t no-print">
+                <button id="valider-appel-btn" class="w-full bg-blue-600 text-white btn-tactile rounded-lg py-4">Valider l'appel</button>
+            </div>
+        `;
+        document.getElementById('content').innerHTML = html;
+        document.querySelectorAll('.present-btn').forEach(btn => btn.addEventListener('click', e => {
+            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
+            const cur = appelsEnCours.get(id) || { commentaire: '' };
+            cur.statut = 'Présent';
+            appelsEnCours.set(id, cur);
+            renderAppel();
+        }));
+        document.querySelectorAll('.absent-btn').forEach(btn => btn.addEventListener('click', e => {
+            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
+            const cur = appelsEnCours.get(id) || { commentaire: '' };
+            cur.statut = 'Absent';
+            appelsEnCours.set(id, cur);
+            renderAppel();
+        }));
+        document.querySelectorAll('.comment-input').forEach(inp => inp.addEventListener('input', e => {
+            const id = parseInt(e.target.closest('[data-enfant-id]').dataset.enfantId);
+            const cur = appelsEnCours.get(id) || { statut: null };
+            cur.commentaire = e.target.value;
+            appelsEnCours.set(id, cur);
+        }));
+        document.getElementById('valider-appel-btn').addEventListener('click', validerAppel);
+    }
 
-    // ===================== INITIALISATION =====================
+    async function validerAppel() {
+        for (let e of enfantsList) {
+            if (!appelsEnCours.get(e.ID)?.statut) return alert('Tous les enfants doivent avoir un statut.');
+        }
+        if (!confirm('Confirmer la validation ?')) return;
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Enregistrement...</div>`;
+        try {
+            const lignes = [];
+            for (let e of enfantsList) {
+                const d = appelsEnCours.get(e.ID);
+                lignes.push({ ID_Appel: currentAppelId, ID_Enfant: e.ID, Statut: d.statut, Commentaire: d.commentaire || null });
+            }
+            await supabase.from('Lignes_Appel').insert(lignes);
+            await supabase.from('Appels').update({ Terminé: true, Heure_Validation: new Date().toISOString() }).eq('ID', currentAppelId);
+            alert('Appel validé !');
+            currentAppelId = null;
+            showView('select-bus');
+        } catch (e) {
+            alert('Erreur : ' + e.message);
+            showView('appel');
+        }
+    }
+
+    function renderAdminDashboard() {
+        document.getElementById('content').innerHTML = `
+            <div class="space-y-6">
+                <h2 class="text-2xl font-bold text-center">Admin</h2>
+                <button id="admin-enfants-btn" class="w-full bg-indigo-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-users mr-2"></i>Gérer les enfants</button>
+                <button id="admin-rapports-btn" class="w-full bg-green-500 text-white btn-tactile rounded-xl py-6"><i class="fas fa-print mr-2"></i>Rapports du jour</button>
+            </div>
+        `;
+        document.getElementById('admin-enfants-btn').addEventListener('click', () => showView('admin-enfants'));
+        document.getElementById('admin-rapports-btn').addEventListener('click', () => showView('admin-rapports'));
+    }
+
+    async function renderAdminEnfants() {
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>`;
+        try {
+            const { data: enfants, error } = await supabase.from('Enfants').select('*').order('Nom');
+            if (error) throw error;
+            let rows = '';
+            enfants.forEach(e => {
+                rows += `<tr><td>${e.Nom} ${e.Prenom}</td><td>${e.Âge||''}</td><td>${e.Allergies||''}</td><td><input type="checkbox" ${e.Absent_Precoché?'checked':''} data-id="${e.ID}" class="precoch-check"></td><td><button class="delete-enfant text-red-500" data-id="${e.ID}"><i class="fas fa-trash"></i></button></td></tr>`;
+            });
+            document.getElementById('content').innerHTML = `
+                <div class="mb-4 flex justify-between"><h3 class="text-xl font-bold">Enfants</h3><button id="back-dash" class="text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button></div>
+                <table class="w-full"><thead><tr><th>Nom</th><th>Âge</th><th>Allergies</th><th>Absent précoché</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+                <div class="mt-6"><h4>Ajouter un enfant</h4><form id="add-enfant-form" class="space-y-2">
+                    <input type="text" id="new-nom" placeholder="Nom" class="w-full p-2 border rounded" required>
+                    <input type="text" id="new-prenom" placeholder="Prénom" class="w-full p-2 border rounded" required>
+                    <input type="number" id="new-age" placeholder="Âge" class="w-full p-2 border rounded">
+                    <input type="text" id="new-groupe" placeholder="Groupe" class="w-full p-2 border rounded">
+                    <input type="text" id="new-allergies" placeholder="Allergies" class="w-full p-2 border rounded">
+                    <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded">Ajouter</button>
+                </form></div>
+            `;
+            document.getElementById('back-dash').addEventListener('click', () => showView('admin-dashboard'));
+            document.querySelectorAll('.precoch-check').forEach(cb => cb.addEventListener('change', async e => {
+                await supabase.from('Enfants').update({ Absent_Precoché: e.target.checked }).eq('ID', e.target.dataset.id);
+            }));
+            document.querySelectorAll('.delete-enfant').forEach(btn => btn.addEventListener('click', async e => {
+                if (confirm('Supprimer ?')) {
+                    await supabase.from('Enfants').delete().eq('ID', e.currentTarget.dataset.id);
+                    renderAdminEnfants();
+                }
+            }));
+            document.getElementById('add-enfant-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const data = {
+                    Nom: document.getElementById('new-nom').value,
+                    Prenom: document.getElementById('new-prenom').value,
+                    Âge: parseInt(document.getElementById('new-age').value) || null,
+                    Groupe: document.getElementById('new-groupe').value,
+                    Allergies: document.getElementById('new-allergies').value,
+                    Absent_Precoché: false
+                };
+                await supabase.from('Enfants').insert([data]);
+                renderAdminEnfants();
+            });
+        } catch (e) {
+            alert('Erreur : ' + e.message);
+            showView('admin-dashboard');
+        }
+    }
+
+    async function renderAdminRapports() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('content').innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Chargement...</div>`;
+        try {
+            const { data: appels } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('Date', today).eq('Terminé', true);
+            if (!appels || appels.length === 0) {
+                document.getElementById('content').innerHTML = `<p>Aucun appel terminé aujourd'hui.</p><button id="back-dash2" class="mt-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>`;
+                document.getElementById('back-dash2').addEventListener('click', () => showView('admin-dashboard'));
+                return;
+            }
+            let options = '';
+            appels.forEach(a => options += `<option value="${a.ID}">Bus ${a.Bus_Num} - ${a.Coachs?.Nom || '?'}</option>`);
+            document.getElementById('content').innerHTML = `
+                <button id="back-dash2" class="mb-4 text-blue-600"><i class="fas fa-arrow-left"></i> Retour</button>
+                <h3>Rapports du ${today}</h3>
+                <select id="appel-select" class="w-full p-3 border rounded mb-4">${options}</select>
+                <button id="preview-print" class="w-full bg-green-600 text-white btn-tactile rounded-lg"><i class="fas fa-print"></i> Imprimer</button>
+            `;
+            document.getElementById('back-dash2').addEventListener('click', () => showView('admin-dashboard'));
+            document.getElementById('preview-print').addEventListener('click', async () => {
+                const appelId = document.getElementById('appel-select').value;
+                const { data: appel } = await supabase.from('Appels').select('*, Coachs(Nom)').eq('ID', appelId).single();
+                const { data: lignes } = await supabase.from('Lignes_Appel').select('*, Enfants(*)').eq('ID_Appel', appelId);
+                document.getElementById('print-date').innerText = new Date(appel.Date).toLocaleDateString('fr-FR');
+                document.getElementById('print-bus-info').innerHTML = `Bus ${appel.Bus_Num} - Coach ${appel.Coachs?.Nom}`;
+                const tbody = document.getElementById('print-tbody');
+                tbody.innerHTML = '';
+                lignes.forEach(l => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${l.Enfants?.Prenom} ${l.Enfants?.Nom}</td><td>${l.Enfants?.Âge||''}</td><td>${l.Enfants?.Groupe||''}</td><td>${l.Enfants?.Allergies||''}</td><td>${l.Statut}</td><td>${l.Commentaire||''}</td>`;
+                    tbody.appendChild(row);
+                });
+                window.print();
+            });
+        } catch (e) {
+            alert('Erreur : ' + e.message);
+            showView('admin-dashboard');
+        }
+    }
+
+    // ===================== DÉMARRAGE =====================
     document.addEventListener('DOMContentLoaded', () => {
-        log('Application prête.');
         showView('login');
         document.getElementById('logout-btn').addEventListener('click', logout);
     });
-
-    // Test de connexion immédiat (pour déboguer)
-    (async function testSupabaseConnection() {
-        try {
-            const { error } = await supabase.from('Coachs').select('count', { count: 'exact', head: true });
-            if (error) {
-                log('❌ Test de connexion échoué: ' + error.message, true);
-                document.getElementById('content').innerHTML += `
-                    <div class="error-box mt-4">
-                        <strong>Problème de connexion à Supabase</strong><br>
-                        ${error.message}<br>
-                        <small>Vérifie que les tables existent et que les politiques RLS sont activées.</small>
-                    </div>
-                `;
-            } else {
-                log('✅ Connexion Supabase OK, tables accessibles');
-            }
-        } catch (e) {
-            log('❌ Exception test connexion: ' + e.message, true);
-        }
-    })();
 </script>
 </body>
 </html>
